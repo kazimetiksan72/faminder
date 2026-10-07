@@ -19,7 +19,7 @@
 ## GitHub / Vercel yayın öncesi kontrolü
 
 - Node.js 24.21.0 ile 36 test ve tüm TypeScript kontrolleri geçti. Vercel ve CI sürümü `24.x` olarak sabitlendi.
-- Yalnızca Git'e girecek dosyalardan, `.env` dosyaları olmadan temiz bir kopya oluşturuldu. `vercel.json` içindeki workspace kurulum komutuyla panel/API/ortak paket yüklendi; üretim build'i başarılı.
+- Yalnızca Git'e girecek dosyalardan, `.env` dosyaları olmadan temiz bir kopya oluşturuldu. `NODE_ENV=production` ile `vercel.json` içindeki workspace kurulum komutu çalıştırıldı; panel/API/ortak paket kurulumu ve üretim build'i başarılı. `--include=dev` ile derleme araçlarının üretim ortamında da kurulması doğrulandı.
 - Vercel'in resmi `@vercel/node` 22.0.0 builder'ı API'yi `nodejs24.x` fonksiyonu olarak paketledi. 430 dosyalık pakette tablet kaynakları ve yerel `.env` dosyaları bulunmadığı doğrulandı.
 - Paket ayrı bir geçici dizinde açıldı ve bağımsız çalıştırıldı. Geçici MongoDB üzerinde sağlık kontrolü, yetkisiz erişim, hesap oluşturma, Secure oturum çerezi, snapshot ve origin kısıtlaması başarılı.
 - Vercel routing-utils ile `/api/health` ve `/api/auth/login` yollarının API'ye, `/demo` yolunun panelin `index.html` dosyasına yönlendiği doğrulandı.

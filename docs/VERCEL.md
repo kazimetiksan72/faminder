@@ -15,7 +15,7 @@ Vercel'de **Add New → Project → Import Git Repository** ile [kazimetiksan72/
 | Build Command    | `npm run build`                        |
 | Output Directory | `apps/admin/dist`                      |
 
-Kurulum, build ve output ayarları kökteki `vercel.json` içinde hazırdır; panelden değiştirmek gerekmez. `apps/admin` klasörünü Root Directory seçmeyin; API ve ortak paket de aynı projeye dahildir. Vercel kurulumu yalnızca panel, API, ortak paket ve kök geliştirme araçlarını yükler; tabletin native bağımlılıkları ve test MongoDB indirmesi yayın derlemesine dahil edilmez.
+Kurulum, build ve output ayarları kökteki `vercel.json` içinde hazırdır; panelden değiştirmek gerekmez. `apps/admin` klasörünü Root Directory seçmeyin; API ve ortak paket de aynı projeye dahildir. Vercel kurulumu yalnızca panel, API, ortak paket ve kök geliştirme araçlarını yükler; tabletin native bağımlılıkları ve test MongoDB indirmesi yayın derlemesine dahil edilmez. `--include=dev`, `NODE_ENV=production` tanımlı olsa bile TypeScript ve Vite gibi derleme araçlarının kurulmasını sağlar.
 
 ## 2. Ortam değişkenleri
 
