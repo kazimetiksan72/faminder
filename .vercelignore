@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+node_modules
+**/node_modules
+artifacts
+apps/tablet/ios
+apps/tablet/android
+**/.expo
+**/dist
+coverage
+*.log

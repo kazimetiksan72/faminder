@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "MONGOMS_DISABLE_POSTINSTALL=1 npm ci --workspace @faminder/admin --workspace @faminder/api --workspace @faminder/shared --include-workspace-root",
+  "buildCommand": "npm run build",
+  "outputDirectory": "apps/admin/dist",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 300,
+      "includeFiles": "packages/shared/dist/**"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!api(?:/|$)).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

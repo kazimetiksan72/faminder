@@ -1,0 +1,31 @@
+{
+  "name": "faminder",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "npm run build -w @faminder/shared && node scripts/dev.mjs",
+    "tablet": "npm run build -w @faminder/shared && npm run start -w @faminder/tablet",
+    "build": "npm run build -w @faminder/shared && npm run build -w @faminder/api && npm run build -w @faminder/admin",
+    "typecheck": "npm run build -w @faminder/shared && npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.json",
+    "test": "npm run build -w @faminder/shared && vitest run",
+    "db:check": "tsx scripts/check-db.ts"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "tsx": "^4.20.6",
+    "vitest": "^5.0.3",
+    "@types/node": "^22.19.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "shell-quote": "^1.11.0"
+  },
+  "type": "module"
+}

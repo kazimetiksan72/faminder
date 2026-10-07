@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Faminder",
+    "slug": "faminder",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "light",
+    "scheme": "faminder",
+    "android": {
+      "package": "com.faminder.tablet",
+      "permissions": ["WAKE_LOCK"],
+      "allowBackup": false
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.faminder.tablet",
+      "requireFullScreen": true,
+      "infoPlist": {
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "NSLocalNetworkUsageDescription": "Faminder, geliştirme sırasında aynı ağdaki aile yönetim sunucusuna bağlanır."
+      }
+    },
+    "plugins": [
+      "./plugins/with-landscape.cjs",
+      "expo-secure-store",
+      "expo-sqlite",
+      ["expo-audio", { "microphonePermission": false, "recordAudioAndroid": false }]
+    ]
+  }
+}
