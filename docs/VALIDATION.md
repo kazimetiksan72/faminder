@@ -41,6 +41,8 @@ Tablet istekleri React Native'in desteklediği AbortController ile iptal edilir.
 
 ## Ön hatırlatmalar
 
+- Ön hatırlatmaları içeren iOS Release sürümü 8 Ekim tarihinde iPad'e kuruldu ve başlatıldı. Paket üretim API adresini kullanır; açılış konsolunda JavaScript hatası görülmedi.
+
 - En fazla iki farklı tam dakika değeri hem oluşturma hem düzenlemede sunucuda doğrulanır; eski kayıtların varsayılanı boş listedir.
 - 19:00 etkinliği için 18:00 / 18:30 / 19:00 sırası, Türkçe cümleler, ayrı olay kimlikleri, yeniden açılışta tekrar çalmama ve ön bildirimin ana duyuruyu engellememesi test edildi.
 - Tek seferlik/haftalık programlarda gece yarısı geçişi, saat dilimi ve yaz saati farkları; etkinlik başladıktan sonra geciken ön bildirimin atlanması test edildi.
