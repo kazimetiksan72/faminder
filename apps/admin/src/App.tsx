@@ -483,7 +483,10 @@ export default function App() {
   const done = new Set(
     data.events
       .filter(
-        (e) => e.kind === 'completed' && dateIn(new Date(e.at), data.family.timezone) === selected,
+        (e) =>
+          e.kind === 'completed' &&
+          !e.minutesBefore &&
+          dateIn(new Date(e.at), data.family.timezone) === selected,
       )
       .map((e) => e.reminderId),
   ).size;
@@ -1040,7 +1043,9 @@ export default function App() {
                       <strong>{e.title}</strong>
                       <span>
                         {e.minutesBefore ? `${durationLabel(e.minutesBefore)} önce · ` : ''}
-                        {eventNames[e.kind]}
+                        {e.minutesBefore && e.kind === 'completed'
+                          ? 'Ön hatırlatma onaylandı'
+                          : eventNames[e.kind]}
                       </span>
                     </div>
                     <time>
