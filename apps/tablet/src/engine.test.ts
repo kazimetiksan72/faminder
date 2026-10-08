@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   defaultSettings,
+  advanceTexts,
   reminderInputSchema,
   type Occurrence,
   type Snapshot,
@@ -321,5 +322,64 @@ describe('text delivery and on-demand speech', () => {
     expect(await work).toBeInstanceOf(Error);
     expect(mocks.player).toHaveBeenCalledTimes(1);
     expect(playback.players[0].remove).toHaveBeenCalledOnce();
+  });
+  it('plays both advance reminders and the main reminder once each across a restart', async () => {
+    const s = fixture();
+    s.reminders[0].content.advanceReminders = [60, 30];
+    s.reminders[0].content.advanceSpeech = advanceTexts(s.reminders[0].content, 'Ateş').map(
+      (text, i) => ({ ...text, audioKey: String(i).repeat(64) }),
+    );
+    mocks.meta.set('snapshot', s);
+    vi.setSystemTime(at - 60 * 60000);
+    scheduler = new Scheduler(vi.fn(), vi.fn(), vi.fn(), 'device');
+    await scheduler.start();
+    await turns();
+    expect(mocks.statuses.map((s) => s.kind)).toEqual(['played']);
+    await scheduler.stop();
+    scheduler = new Scheduler(vi.fn(), vi.fn(), vi.fn(), 'device');
+    await scheduler.start();
+    await turns();
+    vi.setSystemTime(at - 30 * 60000);
+    await scheduler.tick();
+    vi.setSystemTime(at);
+    await scheduler.tick();
+    expect(mocks.statuses.map((s) => s.kind)).toEqual(['played', 'played', 'played']);
+    expect(new Set(mocks.statuses.map((s) => s.id)).size).toBe(3);
+    expect(mocks.ensure.mock.calls.map(([o]) => o.minutesBefore ?? 0)).toEqual([60, 30, 0]);
+    expect(mocks.player).toHaveBeenCalledTimes(6);
+  });
+  it('does not play an advance reminder removed while speech is being prepared', async () => {
+    const s = fixture();
+    s.reminders[0].content.advanceReminders = [60];
+    s.reminders[0].content.advanceSpeech = advanceTexts(s.reminders[0].content).map((text) => ({
+      ...text,
+      audioKey: 'b'.repeat(64),
+    }));
+    mocks.meta.set('snapshot', s);
+    vi.setSystemTime(at - 60 * 60000);
+    mocks.ensure.mockImplementation(async () => {
+      s.reminders[0].content.advanceReminders = [];
+      mocks.meta.set('snapshot', s);
+    });
+    scheduler = new Scheduler(vi.fn(), vi.fn(), vi.fn(), 'device');
+    await scheduler.start();
+    await turns();
+    expect(mocks.player).not.toHaveBeenCalled();
+    expect(mocks.statuses.map((s) => s.kind)).toEqual(['interrupted']);
+  });
+  it('skips an advance reminder after the event starts while still reading the main reminder', async () => {
+    const s = fixture();
+    s.reminders[0].content.advanceReminders = [1];
+    s.reminders[0].content.advanceSpeech = advanceTexts(s.reminders[0].content).map((text) => ({
+      ...text,
+      audioKey: 'b'.repeat(64),
+    }));
+    mocks.meta.set('snapshot', s);
+    scheduler = new Scheduler(vi.fn(), vi.fn(), vi.fn(), 'device');
+    await scheduler.start();
+    await turns();
+    expect(mocks.statuses.map((s) => s.kind)).toEqual(['missed', 'played']);
+    expect(mocks.ensure).toHaveBeenCalledOnce();
+    expect(mocks.ensure.mock.calls[0][0].minutesBefore).toBeUndefined();
   });
 });

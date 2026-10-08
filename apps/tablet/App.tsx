@@ -12,7 +12,13 @@ import {
 import { useKeepAwake } from 'expo-keep-awake';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { nextOccurrence, isQuiet, type Snapshot, type Occurrence } from '@faminder/shared';
+import {
+  nextOccurrence,
+  isQuiet,
+  durationLabel,
+  type Snapshot,
+  type Occurrence,
+} from '@faminder/shared';
 import * as storage from './src/storage';
 import {
   api,
@@ -283,6 +289,13 @@ function Wall() {
     .filter((x) => x.o)
     .sort((a, b) => a.o!.scheduledAt.localeCompare(b.o!.scheduledAt));
   const next = upcoming[0];
+  const clockTime = (iso: string) =>
+    new Intl.DateTimeFormat('tr-TR', {
+      timeZone: snapshot.family.timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(iso));
+  const displayed = current ?? next?.o;
   const quiet = isQuiet(now, snapshot.family);
   const active = recent.find((r) => r.occurrence.id === current?.id);
   const actionable = !!current && !!active && active.status === 'played';
@@ -339,7 +352,11 @@ function Wall() {
           >
             <View style={s.cardTop}>
               <Text style={s.kicker}>
-                {current ? 'BİR KÜÇÜK HATIRLATMA' : 'SIRADAKİ KÜÇÜK ADIM'}
+                {displayed?.minutesBefore
+                  ? `ÖN HATIRLATMA · ${durationLabel(displayed.minutesBefore).toLocaleUpperCase('tr')} ÖNCE`
+                  : current
+                    ? 'BİR KÜÇÜK HATIRLATMA'
+                    : 'SIRADAKİ KÜÇÜK ADIM'}
               </Text>
               <Text style={s.cardIcon}>
                 {iconMap[(current?.version ?? next?.r.content)?.icon ?? 'heart']}
@@ -350,7 +367,7 @@ function Wall() {
             </Text>
             <Text style={s.currentText}>
               {current?.version.text ??
-                next?.r.content?.text ??
+                next?.o?.version.text ??
                 'Ailenizle geçireceğiniz güzel anların tadını çıkarın.'}
             </Text>
             {current ? (
@@ -362,15 +379,19 @@ function Wall() {
                       style={s.primaryButton}
                       onPress={() => void act(current, 'complete')}
                     >
-                      <Text style={s.primaryLabel}>✓ Tamamlandı</Text>
+                      <Text style={s.primaryLabel}>
+                        ✓ {current.minutesBefore ? 'Anladım' : 'Tamamlandı'}
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      disabled={busy}
-                      style={s.lightButton}
-                      onPress={() => void act(current, 'snooze')}
-                    >
-                      <Text style={s.buttonLabel}>5 dakika sonra</Text>
-                    </TouchableOpacity>
+                    {!current.minutesBefore && (
+                      <TouchableOpacity
+                        disabled={busy}
+                        style={s.lightButton}
+                        onPress={() => void act(current, 'snooze')}
+                      >
+                        <Text style={s.buttonLabel}>5 dakika sonra</Text>
+                      </TouchableOpacity>
+                    )}
                   </>
                 ) : (
                   <Text style={s.hint}>
@@ -387,7 +408,7 @@ function Wall() {
                 </TouchableOpacity>
               </View>
             ) : next ? (
-              <Text style={s.nextTime}>{next.r.content!.schedule.time}</Text>
+              <Text style={s.nextTime}>{clockTime(next.o!.scheduledAt)}</Text>
             ) : null}
           </View>
           <View style={s.listHeader}>
@@ -397,13 +418,14 @@ function Wall() {
           <ScrollView style={s.upcoming} contentContainerStyle={{ gap: 10 }}>
             {upcoming.slice(0, 8).map(({ r, o }) => (
               <View style={s.upcomingRow} key={r.id}>
-                <Text style={s.rowTime}>{r.content!.schedule.time}</Text>
+                <Text style={s.rowTime}>{clockTime(o!.scheduledAt)}</Text>
                 <View style={[s.rowIcon, { backgroundColor: colorMap[r.content!.color] }]}>
                   <Text style={s.rowIconText}>{iconMap[r.content!.icon]}</Text>
                 </View>
                 <View style={s.rowText}>
                   <Text style={s.rowTitle}>{r.content!.title}</Text>
                   <Text style={s.smallText}>
+                    {o!.minutesBefore ? `${durationLabel(o!.minutesBefore)} önce · ` : ''}
                     {new Intl.DateTimeFormat('tr-TR', {
                       timeZone: snapshot.family.timezone,
                       weekday: 'long',

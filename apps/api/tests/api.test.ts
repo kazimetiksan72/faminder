@@ -186,19 +186,17 @@ describe('family API with on-demand speech', () => {
   it('reads older desired/active records as text without running old jobs', async () => {
     const r = (await snapshot()).reminders[0];
     const { audioKey, ...version } = r.content;
-    await (await db())
-      .collection('reminders')
-      .updateOne(
-        { id },
-        {
-          $set: {
-            desired: { ...version, audioId: 'old-file' },
-            active: null,
-            audioStatus: 'error',
-          },
-          $unset: { content: '' },
+    await (await db()).collection('reminders').updateOne(
+      { id },
+      {
+        $set: {
+          desired: { ...version, audioId: 'old-file' },
+          active: null,
+          audioStatus: 'error',
         },
-      );
+        $unset: { content: '' },
+      },
+    );
     const converted = (await snapshot()).reminders[0];
     expect(converted.content.text).toBe(version.text);
     expect(converted.content.audioKey).toBe(audioKey);
@@ -288,5 +286,82 @@ describe('family API with on-demand speech', () => {
     await supertest(app).get('/api/snapshot').auth(deviceToken, { type: 'bearer' }).expect(401);
     await alice.delete(`/api/reminders/${id}`).set(header).expect(200);
     expect((await snapshot()).reminders).toHaveLength(0);
+  });
+  it('validates the two-reminder limit on both create and update', async () => {
+    await alice
+      .post('/api/reminders')
+      .set(header)
+      .send({ ...input, advanceReminders: [60, 30, 15] })
+      .expect(400);
+    const created = (await alice.post('/api/reminders').set(header).send(input).expect(201)).body
+      .id;
+    await alice
+      .put(`/api/reminders/${created}`)
+      .set(header)
+      .send({ ...input, advanceReminders: [30, 30] })
+      .expect(400);
+    await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
+  });
+  it('serves only configured, family-owned advance speech and rejects removed or renamed variants', async () => {
+    const member = (await alice.post('/api/members').set(header).send({ name: 'Ateş' }).expect(201))
+      .body;
+    const advanced = {
+      ...input,
+      title: 'satranç dersi',
+      memberId: member.id,
+      advanceReminders: [60, 30],
+    };
+    vi.mocked(fetch).mockClear();
+    const created = (await alice.post('/api/reminders').set(header).send(advanced).expect(201)).body
+      .id;
+    const r = (await snapshot()).reminders.find((r: any) => r.id === created);
+    expect(fetch).not.toHaveBeenCalled();
+    const lead = r.content.advanceSpeech.find(
+      (s: any) => s.minutesBefore === 60 && s.day === 'today',
+    );
+    const request = {
+      revision: r.content.revision,
+      audioKey: lead.audioKey,
+      minutesBefore: 60,
+      day: 'today',
+    };
+    expect(lead.text).toBe('Ateş, bugün satranç dersin var. Derse 1 saat kaldı.');
+    expect(lead.audioKey).not.toBe(r.content.audioKey);
+    await bob.post(`/api/reminders/${created}/speech`).set(header).send(request).expect(404);
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send({ ...request, minutesBefore: 15 })
+      .expect(409);
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send({ ...request, day: 'tomorrow' })
+      .expect(409);
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send({ ...request, text: 'Untrusted text' })
+      .expect(200)
+      .expect('X-Audio-Key', lead.audioKey);
+    expect(
+      JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).input[0].content[0].text,
+    ).toBe(lead.text);
+    vi.mocked(fetch).mockImplementationOnce(async () => {
+      await (await db())
+        .collection('members')
+        .updateOne({ id: member.id }, { $set: { name: 'Deniz' } });
+      return generated();
+    });
+    await alice.post(`/api/reminders/${created}/speech`).set(header).send(request).expect(409);
+    await alice
+      .put(`/api/reminders/${created}`)
+      .set(header)
+      .send({ ...advanced, advanceReminders: [] })
+      .expect(200);
+    await alice.post(`/api/reminders/${created}/speech`).set(header).send(request).expect(409);
+    const latest = (await snapshot()).reminders.find((r: any) => r.id === created);
+    expect(latest.content.advanceSpeech).toEqual([]);
+    await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
   });
 });

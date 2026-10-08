@@ -37,6 +37,14 @@ export const reminderInputSchema = z.object({
   voice: z.enum(voices).default('Kore'),
   style: z.enum(['warm', 'calm', 'cheerful']).default('warm'),
   schedule: scheduleSchema,
+  advanceReminders: z
+    .array(z.number().int().min(1).max(1440))
+    .max(2, 'En fazla iki ön hatırlatma ekleyebilirsiniz.')
+    .refine(
+      (values) => new Set(values).size === values.length,
+      'Ön hatırlatma süreleri farklı olmalı.',
+    )
+    .default([]),
   enabled: z.boolean().default(true),
 });
 export const settingsSchema = z.object({
@@ -54,6 +62,14 @@ export type Version = ReminderInput & {
   revision: string;
   audioKey: string;
   createdAt: string;
+  advanceSpeech?: AdvanceSpeech[];
+};
+export type SpeechDay = 'today' | 'tomorrow' | 'dayAfterTomorrow';
+export type AdvanceSpeech = {
+  minutesBefore: number;
+  day: SpeechDay;
+  text: string;
+  audioKey: string;
 };
 export type Reminder = {
   id: string;
@@ -86,6 +102,7 @@ export type Execution = {
   at: string;
   title: string;
   deviceId?: string;
+  minutesBefore?: number;
 };
 export type Snapshot = {
   family: Settings & { id: string };
@@ -96,7 +113,15 @@ export type Snapshot = {
   serverTime: string;
   capabilities: { speechConfigured: boolean; model: string };
 };
-export type Occurrence = { id: string; reminderId: string; scheduledAt: string; version: Version };
+export type Occurrence = {
+  id: string;
+  reminderId: string;
+  scheduledAt: string;
+  version: Version;
+  minutesBefore?: number;
+  eventAt?: string;
+  speechDay?: SpeechDay;
+};
 export const defaultSettings: Settings = {
   familyName: 'Ailem',
   timezone: 'Europe/Istanbul',
@@ -105,6 +130,58 @@ export const defaultSettings: Settings = {
   quietEnabled: true,
 };
 export const dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+export function durationLabel(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return [hours ? `${hours} saat` : '', rest ? `${rest} dakika` : ''].filter(Boolean).join(' ');
+}
+export function advanceText(
+  title: string,
+  minutes: number,
+  name?: string,
+  day: SpeechDay = 'today',
+) {
+  const activity = title.trim().replace(/[.!?]+$/, '');
+  const who = name ? `${name}, ` : '';
+  const when = day === 'today' ? 'bugün' : day === 'tomorrow' ? 'yarın' : 'öbür gün';
+  const lesson = name && / dersi$/i.test(activity);
+  const subject = lesson ? activity.replace(/dersi$/i, 'dersin') : activity;
+  if (minutes >= 60)
+    return `${who}${when} ${subject} var. ${lesson ? 'Derse' : 'Başlamasına'} ${durationLabel(minutes)} kaldı.`;
+  return lesson
+    ? `${who}${activity.replace(/dersi$/i, 'dersine')} ${durationLabel(minutes)} kaldı.`
+    : `${who}${activity} için ${durationLabel(minutes)} kaldı.`;
+}
+export function suggestedReminderText(title: string, name?: string): string {
+  const activity = title.trim().replace(/[.!?]+$/, '');
+  const who = name ? `${name}, ` : '';
+  if (/ dersi$/i.test(activity))
+    return `${who}${name ? activity.replace(/dersi$/i, 'dersin') : activity} başladı. İyi dersler.`;
+  return `${who}${activity.replace(/ zamanı$/i, '')} zamanı.`;
+}
+export function advanceTexts(
+  input: Pick<ReminderInput, 'title' | 'advanceReminders'>,
+  name?: string,
+) {
+  return (input.advanceReminders ?? []).flatMap((minutesBefore) =>
+    (['today', 'tomorrow', 'dayAfterTomorrow'] as const).map((day) => ({
+      minutesBefore,
+      day,
+      text: advanceText(input.title, minutesBefore, name, day),
+    })),
+  );
+}
+export function announcementVersion(
+  v: Version,
+  minutesBefore = 0,
+  day: SpeechDay = 'today',
+): Version | null {
+  if (!minutesBefore) return v;
+  if (!v.advanceReminders?.includes(minutesBefore)) return null;
+  const speech = v.advanceSpeech?.find((s) => s.minutesBefore === minutesBefore && s.day === day);
+  return speech ? { ...v, text: speech.text, audioKey: speech.audioKey } : null;
+}
 
 // Repeated wall-clock times in DST overlap run once (the earliest instant).
 // Nonexistent wall-clock times in a DST gap are skipped rather than shifted.
@@ -125,20 +202,36 @@ export function occurrencesBetween(
   if (!reminder.enabled || !v || to < from) return [];
   const result: Occurrence[] = [];
   let day = DateTime.fromMillis(from, { zone: v.schedule.timezone }).startOf('day');
-  const end = DateTime.fromMillis(to, { zone: v.schedule.timezone }).endOf('day');
+  const offsets = [0, ...(v.advanceReminders ?? [])];
+  // A notification can fall on the day before its event, including weekly/one-off events.
+  const end = DateTime.fromMillis(to + Math.max(...offsets) * 60000, {
+    zone: v.schedule.timezone,
+  }).endOf('day');
   for (let count = 0; day <= end && count < 32; count++, day = day.plus({ days: 1 })) {
     const at = onDay(v.schedule, day);
-    if (at && at.toMillis() >= from && at.toMillis() <= to) {
-      const scheduledAt = at.toUTC().toISO()!;
+    if (!at) continue;
+    for (const minutesBefore of offsets) {
+      const due = at.minus({ minutes: minutesBefore });
+      if (due.toMillis() < from || due.toMillis() > to) continue;
+      const eventAt = at.toUTC().toISO()!;
+      const scheduledAt = due.toUTC().toISO()!;
+      const speechDay = due.hasSame(at, 'day')
+        ? 'today'
+        : due.plus({ days: 1 }).hasSame(at, 'day')
+          ? 'tomorrow'
+          : 'dayAfterTomorrow';
+      const version = announcementVersion(v, minutesBefore, speechDay);
+      if (!version) continue;
       result.push({
-        id: `${reminder.id}:${scheduledAt}`,
+        id: `${reminder.id}:${eventAt}${minutesBefore ? `:before:${minutesBefore}` : ''}`,
         reminderId: reminder.id,
         scheduledAt,
-        version: v,
+        version,
+        ...(minutesBefore ? { minutesBefore, eventAt, speechDay } : {}),
       });
     }
   }
-  return result;
+  return result.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 export function nextOccurrence(
   reminder: Pick<Reminder, 'id' | 'enabled' | 'content'>,
@@ -151,12 +244,41 @@ export function nextOccurrence(
     return (
       occurrencesBetween(
         reminder,
-        Math.max(now, at.startOf('day').toMillis()),
+        Math.max(now, at.startOf('day').toMillis() - 86400000),
         at.endOf('day').toMillis(),
       )[0] ?? null
     );
   }
   return occurrencesBetween(reminder, now, now + 8 * 86400000)[0] ?? null;
+}
+export function reminderPreview(input: ReminderInput, name?: string): Occurrence[] {
+  if (!scheduleSchema.safeParse(input.schedule).success) return [];
+  input = {
+    ...input,
+    advanceReminders: [...new Set(input.advanceReminders)].filter(
+      (v) => Number.isInteger(v) && v >= 1 && v <= 1440,
+    ),
+  };
+  const version: Version = {
+    ...input,
+    revision: 'preview',
+    audioKey: 'preview',
+    createdAt: '',
+    advanceSpeech: advanceTexts(input, name).map((s) => ({ ...s, audioKey: 'preview' })),
+  };
+  const reminder = { id: 'preview', enabled: true, content: version };
+  const now =
+    input.schedule.kind === 'once'
+      ? DateTime.fromISO(input.schedule.date!, { zone: input.schedule.timezone })
+          .startOf('day')
+          .toMillis()
+      : Date.now();
+  const main = nextOccurrence({ ...reminder, content: { ...version, advanceReminders: [] } }, now);
+  if (!main) return [];
+  const eventTime = Date.parse(main.scheduledAt);
+  return occurrencesBetween(reminder, eventTime - 1440 * 60000, eventTime).filter(
+    (o) => (o.eventAt ?? o.scheduledAt) === main.scheduledAt,
+  );
 }
 export function isQuiet(now: number, settings: Settings): boolean {
   if (!settings.quietEnabled || settings.quietStart === settings.quietEnd) return false;

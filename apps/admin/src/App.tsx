@@ -45,9 +45,13 @@ import {
   scheduleLabel,
   nextOccurrence,
   reminderInputSchema,
+  durationLabel,
+  reminderPreview,
+  suggestedReminderText,
   type Reminder,
   type ReminderInput,
   type Snapshot,
+  type Occurrence,
   type Settings as FamilySettings,
 } from '@faminder/shared';
 import { ApiError, client, isDemo, request } from './client';
@@ -387,7 +391,7 @@ export default function App() {
       setWorking(false);
     }
   }
-  async function preview(r: Reminder) {
+  async function preview(r: Reminder, occurrence?: Occurrence) {
     previewRequest.current?.abort();
     player.current?.pause();
     if (playing === r.id) {
@@ -409,7 +413,13 @@ export default function App() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'X-Faminder-Client': '1' },
-        body: JSON.stringify({ revision: r.content.revision, audioKey: r.content.audioKey }),
+        body: JSON.stringify({
+          revision: r.content.revision,
+          audioKey: occurrence?.version.audioKey ?? r.content.audioKey,
+          ...(occurrence?.minutesBefore
+            ? { minutesBefore: occurrence.minutesBefore, day: occurrence.speechDay }
+            : {}),
+        }),
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(105000)]),
       });
       if (!response.ok) {
@@ -826,7 +836,11 @@ export default function App() {
                     {next ? (
                       <>
                         <div className="next-time">
-                          {next.r.content!.schedule.time}
+                          {new Intl.DateTimeFormat('tr-TR', {
+                            timeZone: data.family.timezone,
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }).format(new Date(next.occurrence!.scheduledAt))}
                           <span>
                             {dateIn(
                               new Date(next.occurrence!.scheduledAt),
@@ -842,10 +856,15 @@ export default function App() {
                           </span>
                         </div>
                         <h3>{next.r.content!.title}</h3>
-                        <p>“{next.r.content!.text}”</p>
+                        {next.occurrence!.minutesBefore && (
+                          <span className="advance-tag">
+                            {durationLabel(next.occurrence!.minutesBefore)} önce · Ön hatırlatma
+                          </span>
+                        )}
+                        <p>“{next.occurrence!.version.text}”</p>
                         <button
                           className="button secondary full"
-                          onClick={() => void preview(next.r)}
+                          onClick={() => void preview(next.r, next.occurrence!)}
                         >
                           <Play size={15} />
                           Sesi dinle
@@ -1019,7 +1038,10 @@ export default function App() {
                     </div>
                     <div>
                       <strong>{e.title}</strong>
-                      <span>{eventNames[e.kind]}</span>
+                      <span>
+                        {e.minutesBefore ? `${durationLabel(e.minutesBefore)} önce · ` : ''}
+                        {eventNames[e.kind]}
+                      </span>
                     </div>
                     <time>
                       {new Date(e.at).toLocaleString('tr-TR', { timeZone: data.family.timezone })}
@@ -1291,6 +1313,12 @@ function RoutineCard({
             <span className={`person-dot ${member?.color ?? 'sage'}`} />
             {member?.name ?? 'Tüm aile'}
           </span>
+          {!!v.advanceReminders?.length && (
+            <span className="advance-tag">
+              <Bell size={12} />
+              {v.advanceReminders.map((minutes) => `${durationLabel(minutes)} önce`).join(' · ')}
+            </span>
+          )}
           <span
             className={`status-badge ${!r.enabled ? 'paused' : delivered || isDemo() ? 'ready' : 'pending'}`}
           >
@@ -1340,26 +1368,31 @@ function Editor({
   busy: boolean;
 }) {
   const [form, setForm] = useState<ReminderInput>(
-    reminder?.content ?? {
-      title: '',
-      text: '',
-      memberId: null,
-      color: 'sage',
-      icon: 'sun',
-      voice: 'Kore',
-      style: 'warm',
-      enabled: true,
-      schedule: {
-        kind: 'daily',
-        time: '20:30',
-        days: [1, 2, 3, 4, 5],
-        timezone: data.family.timezone,
-      },
-    },
+    reminder
+      ? { ...reminder.content, advanceReminders: reminder.content.advanceReminders ?? [] }
+      : {
+          title: '',
+          text: '',
+          memberId: null,
+          color: 'sage',
+          icon: 'sun',
+          voice: 'Kore',
+          style: 'warm',
+          enabled: true,
+          advanceReminders: [],
+          schedule: {
+            kind: 'daily',
+            time: '20:30',
+            days: [1, 2, 3, 4, 5],
+            timezone: data.family.timezone,
+          },
+        },
   );
   const [error, setError] = useState('');
   const set = <K extends keyof ReminderInput>(k: K, v: ReminderInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+  const memberName = data.members.find((m) => m.id === form.memberId)?.name;
+  const previewItems = reminderPreview(form, memberName);
   return (
     <Modal
       title={reminder ? 'Hatırlatıcıyı düzenleyin' : 'Güne küçük bir hatırlatıcı ekleyin'}
@@ -1399,7 +1432,7 @@ function Editor({
           />
         </label>
         <label>
-          Tablet ne söylesin?
+          Saatinde tablet ne söylesin?
           <textarea
             required
             maxLength={400}
@@ -1412,6 +1445,14 @@ function Editor({
             Metin yapay zekâ ile seslendirilecek. <span>{form.text.length}/400</span>
           </span>
         </label>
+        <button
+          type="button"
+          className="text-button suggest-text"
+          disabled={!form.title.trim()}
+          onClick={() => set('text', suggestedReminderText(form.title, memberName))}
+        >
+          <Sparkles size={14} /> Adına ve kişiye göre metin öner
+        </button>
         <div className="form-grid">
           <label>
             Kimin için?
@@ -1508,6 +1549,98 @@ function Editor({
             />
           </label>
         )}
+        <section className="advance-section" aria-label="Ön hatırlatmalar">
+          <div className="advance-heading">
+            <div>
+              <h3>
+                <Bell size={16} /> Ön hatırlatmalar
+              </h3>
+              <p>Hazırlanmak için biraz zaman. En fazla 2 bildirim ekleyebilirsin.</p>
+            </div>
+            <span>{form.advanceReminders.length}/2</span>
+          </div>
+          {form.advanceReminders.map((minutes, index) => (
+            <div className="advance-row" key={index}>
+              <label>
+                {index + 1}. ön hatırlatma
+                <div className="advance-input">
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={1440}
+                    step={1}
+                    aria-label={`${index + 1}. ön hatırlatma kaç dakika önce`}
+                    value={minutes || ''}
+                    onChange={(e) =>
+                      set(
+                        'advanceReminders',
+                        form.advanceReminders.map((v, i) =>
+                          i === index ? Number(e.target.value) : v,
+                        ),
+                      )
+                    }
+                  />
+                  <span>dakika önce</span>
+                </div>
+              </label>
+              <button
+                type="button"
+                className="icon-button danger"
+                aria-label={`${index + 1}. ön hatırlatmayı kaldır`}
+                onClick={() =>
+                  set(
+                    'advanceReminders',
+                    form.advanceReminders.filter((_, i) => i !== index),
+                  )
+                }
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="button secondary"
+            disabled={form.advanceReminders.length >= 2}
+            onClick={() =>
+              set('advanceReminders', [
+                ...form.advanceReminders,
+                [60, 30, 15].find((v) => !form.advanceReminders.includes(v))!,
+              ])
+            }
+          >
+            <Plus size={15} /> Ön hatırlatma ekle
+          </button>
+          <p className="advance-help">
+            1 dakika ile 24 saat arası seçebilirsin. En az 1 saat varsa “bugün” vurgulanır; geceyi
+            aşarsa gün bilgisi değişir.
+          </p>
+          {!!form.advanceReminders.length && !!form.title.trim() && (
+            <div className="announcement-preview" aria-label="Duyuru akışı">
+              <h4>Tabletin söyleyecekleri</h4>
+              {previewItems.map((o) => (
+                <div className="announcement-step" key={o.id}>
+                  <strong>
+                    {new Intl.DateTimeFormat('tr-TR', {
+                      timeZone: form.schedule.timezone,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }).format(new Date(o.scheduledAt))}
+                  </strong>
+                  <div>
+                    <span>
+                      {o.minutesBefore
+                        ? `${durationLabel(o.minutesBefore)} önce${o.speechDay === 'dayAfterTomorrow' ? ' · iki gün önce' : o.speechDay === 'tomorrow' ? ' · önceki gün' : ''}`
+                        : 'Tam saatinde'}
+                    </span>
+                    <p>{o.version.text || 'Saatinde okunacak metni yukarıya yaz.'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
         <div className="form-divider">
           <AudioLines size={16} />
           <span>HATIRLATICININ SESİ</span>

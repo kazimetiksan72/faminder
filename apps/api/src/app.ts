@@ -10,6 +10,7 @@ import {
   memberSchema,
   settingsSchema,
   defaultSettings,
+  announcementVersion,
   type Version,
 } from '@faminder/shared';
 import { db, initialize } from './db.js';
@@ -179,7 +180,9 @@ app.get('/api/snapshot', async (req, res) => {
   res.set('Cache-Control', 'no-store').json({
     family,
     members,
-    reminders: reminders.map(textReminder),
+    reminders: reminders.map((row) =>
+      textReminder(row, members.find((m) => m.id === (row.content ?? row.desired)?.memberId)?.name),
+    ),
     devices,
     events,
     serverTime: new Date().toISOString(),
@@ -385,6 +388,7 @@ app.post('/api/device/events', deviceOnly, async (req, res) => {
         ]),
         at: z.string().datetime(),
         title: z.string().max(80),
+        minutesBefore: z.number().int().min(1).max(1440).optional(),
       }),
     )
     .max(100)
@@ -413,15 +417,29 @@ app.post('/api/device/events', deviceOnly, async (req, res) => {
   res.json({ accepted: rows.map((r) => r.id) });
 });
 app.post('/api/reminders/:id/speech', async (req, res) => {
-  const { revision, audioKey } = z
-    .object({ revision: z.string().uuid(), audioKey: z.string().regex(/^[a-f0-9]{64}$/) })
+  const { revision, audioKey, minutesBefore, day } = z
+    .object({
+      revision: z.string().uuid(),
+      audioKey: z.string().regex(/^[a-f0-9]{64}$/),
+      minutesBefore: z.number().int().min(0).max(1440).default(0),
+      day: z.enum(['today', 'tomorrow', 'dayAfterTomorrow']).default('today'),
+    })
     .parse(req.body);
   const d = await db();
   const query = { id: req.params.id, familyId: req.principal.familyId, deleted: { $ne: true } };
   const row = await d.collection('reminders').findOne(query);
   if (!row) throw new HttpError(404, 'Hatırlatıcı bulunamadı.');
-  const reminder = textReminder(row);
-  if (reminder.content.revision !== revision || reminder.content.audioKey !== audioKey)
+  const resolve = async (value: Record<string, any>) => {
+    const memberId = (value.content ?? value.desired)?.memberId;
+    const member =
+      minutesBefore && memberId
+        ? await d.collection('members').findOne({ id: memberId, familyId: req.principal.familyId })
+        : null;
+    return textReminder(value, member?.name);
+  };
+  const reminder = await resolve(row);
+  const version = announcementVersion(reminder.content, minutesBefore, day);
+  if (!version || version.revision !== revision || version.audioKey !== audioKey)
     throw new HttpError(409, 'Hatırlatıcı değişti. Programı eşitleyip tekrar deneyin.');
   if (req.principal.kind === 'device' && !reminder.enabled)
     throw new HttpError(409, 'Hatırlatıcı duraklatılmış.');
@@ -432,13 +450,17 @@ app.post('/api/reminders/:id/speech', async (req, res) => {
   };
   res.on('close', disconnect);
   try {
-    const wav = await synthesize(reminder.content, controller.signal);
+    const wav = await synthesize(version, controller.signal);
     // Do not return obsolete text after a slow provider response.
     const latest = await d.collection('reminders').findOne(query);
+    const latestVersion = latest
+      ? announcementVersion((await resolve(latest)).content, minutesBefore, day)
+      : null;
     if (
-      !latest ||
-      textReminder(latest).content.revision !== revision ||
-      (req.principal.kind === 'device' && !latest.enabled)
+      !latestVersion ||
+      latestVersion.revision !== revision ||
+      latestVersion.audioKey !== audioKey ||
+      (req.principal.kind === 'device' && !latest?.enabled)
     )
       throw new HttpError(409, 'Hatırlatıcı değişti. Programı eşitleyip tekrar deneyin.');
     if (

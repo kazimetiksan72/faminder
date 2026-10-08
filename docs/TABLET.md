@@ -66,6 +66,14 @@ Seslendirme sonrası **Tamamlandı** veya **5 dakika sonra** seçilebilir. Aynı
 
 Panelden tablet bağlantısını kaldırmak bir sonraki başarılı ağ isteğinde cihaza ulaşır. Çevrimdışı tablet, iptal bilgisi ulaşana kadar indirilmiş programını çalıştırır. Tabletteki **Cihaz** düğmesine 2 saniye basılı tutarak yerel verileri ve sesleri temizleyip yeniden eşleştirme ekranına dönebilirsiniz.
 
+## Ön hatırlatmalar
+
+Panelde **Ön hatırlatma ekle** ile iki farklı süre seçilebilir (1–1440 dakika). Etkinliğin asıl saatinde, “Saatinde tablet ne söylesin?” alanındaki metin okunur. Ön bildirimler kişi, başlık ve kalan süreye göre otomatik hazırlanır. En az bir saat kalan aynı gün etkinliklerinde “bugün”, önceki güne taşanlarda uygun gün ifadesi kullanılır. Gün hesabı etkinliğin saat dilimine göre yapılır.
+
+Ön bildirim ve ana duyuru ayrı olaylardır. “Anladım” yalnızca o ön bildirimi onaylar; ana duyuruyu iptal etmez. Kalan süreyi yanlış söylememek için ön bildirimlerde 5 dakika erteleme sunulmaz. Etkinlik başlamışsa geciken ön bildirim atlanır. Sessiz saatler, duraklatma ve silme tüm bildirimlere uygulanır. Her duyurudan önce yumuşak ton çalar.
+
+Her farklı ön bildirim metni ilk okunduğunda Gemini sesi oluşturulur, sonraki aynı metinler tablet önbelleğinden kullanılır. Eski hatırlatıcılara kendiliğinden ön bildirim eklenmez. Yeni özellik için API/panel ve tablet birlikte güncellenmelidir.
+
 ## Cihazda kabul denemesi
 
 Vercel ve gerçek ses hazır olduktan sonra:

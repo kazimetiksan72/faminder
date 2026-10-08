@@ -135,4 +135,30 @@ describe('tablet speech cache', () => {
     await expect(run()).rejects.toThrow('Disk error');
     expect(mock.files.size).toBe(0);
   });
+  it('requests and caches advance speech separately from the main announcement', async () => {
+    const advanceKey = 'b'.repeat(64);
+    const lead: Occurrence = {
+      ...occurrence,
+      minutesBefore: 60,
+      speechDay: 'tomorrow',
+      version: { ...occurrence.version, text: 'Yarın satranç dersi var.', audioKey: advanceKey },
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(wav, { headers: { 'X-Audio-Key': advanceKey } }),
+    );
+    await run(lead);
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({
+      revision: 'v1',
+      audioKey: advanceKey,
+      minutesBefore: 60,
+      day: 'tomorrow',
+    });
+    await run();
+    expect(mock.files.has(audioPath(advanceKey))).toBe(true);
+    expect(mock.files.has(audioPath(key))).toBe(true);
+    vi.mocked(fetch).mockRejectedValue(new Error('Offline'));
+    await run(lead);
+    await run();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });

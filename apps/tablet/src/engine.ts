@@ -1,6 +1,12 @@
 import { AppState } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync, type AudioSource } from 'expo-audio';
-import { occurrencesBetween, isQuiet, type Snapshot, type Occurrence } from '@faminder/shared';
+import {
+  occurrencesBetween,
+  isQuiet,
+  announcementVersion,
+  type Snapshot,
+  type Occurrence,
+} from '@faminder/shared';
 import * as store from './storage';
 import { withRequestSignal } from './request';
 import { chimeSource } from './chime';
@@ -108,6 +114,12 @@ class SkippedSpeech extends Error {
   constructor(public kind: 'quiet' | 'missed' | 'interrupted') {
     super(kind);
   }
+}
+function expired(o: Occurrence): boolean {
+  return (
+    Date.now() - Date.parse(o.scheduledAt) > 120000 ||
+    (!!o.minutesBefore && !!o.eventAt && Date.now() >= Date.parse(o.eventAt))
+  );
 }
 export function playFile(
   audioKey: string,
@@ -239,7 +251,7 @@ export class Scheduler {
           continue;
         }
         await store.removeSnooze(o.id);
-        if (Date.now() - Date.parse(o.scheduledAt) > 120000) {
+        if (expired(o)) {
           await store.record(o, 'missed');
           continue;
         }
@@ -257,10 +269,11 @@ export class Scheduler {
               !this.running ||
               !r?.enabled ||
               r.content.revision !== o.version.revision ||
-              r.content.audioKey !== o.version.audioKey
+              announcementVersion(r.content, o.minutesBefore, o.speechDay)?.audioKey !==
+                o.version.audioKey
             )
               throw new SkippedSpeech('interrupted');
-            if (Date.now() - Date.parse(o.scheduledAt) > 120000) throw new SkippedSpeech('missed');
+            if (expired(o)) throw new SkippedSpeech('missed');
             if (isQuiet(Date.now(), refreshed!.family)) throw new SkippedSpeech('quiet');
           });
           await store.record(o, 'played');

@@ -1,4 +1,4 @@
-import type { Version, Reminder } from '@faminder/shared';
+import { advanceTexts, type Version, type Reminder } from '@faminder/shared';
 import { HttpError, hash } from './auth.js';
 
 export const model = () => process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-lite-tts';
@@ -66,12 +66,17 @@ export async function synthesize(v: Version, signal?: AbortSignal): Promise<Buff
 }
 
 // Read older deployments without rewriting or deleting existing family data.
-export function textReminder(row: Record<string, any>): Reminder {
+export function textReminder(row: Record<string, any>, memberName?: string): Reminder {
   const { audioId: _legacyFile, ...source } = row.content ?? row.desired;
   const content: Version = {
     ...source,
     enabled: row.enabled,
+    advanceReminders: source.advanceReminders ?? [],
     audioKey: speechKey(row.familyId, source),
+    advanceSpeech: advanceTexts(source, memberName).map((s) => ({
+      ...s,
+      audioKey: speechKey(row.familyId, { ...source, text: s.text }),
+    })),
   };
   return {
     id: row.id,

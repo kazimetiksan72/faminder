@@ -59,6 +59,7 @@ export async function record(occurrence: Occurrence, kind: EventKind) {
     kind,
     at: new Date().toISOString(),
     title: occurrence.version.title,
+    ...(occurrence.minutesBefore ? { minutesBefore: occurrence.minutesBefore } : {}),
   };
   await (
     await db()
@@ -89,6 +90,8 @@ export async function acknowledge(ids: string[]) {
   for (const id of ids) await d.runAsync('DELETE FROM outbox WHERE id=?', id);
 }
 export async function snooze(o: Occurrence) {
+  if (o.minutesBefore)
+    throw new Error('Ön hatırlatma ertelenemez; asıl hatırlatma kendi saatinde okunacak.');
   const due = Date.now() + 5 * 60000;
   const next = {
     ...o,
@@ -147,7 +150,13 @@ export async function ensureSpeech(
           'X-Faminder-Client': '1',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ revision: o.version.revision, audioKey: key }),
+        body: JSON.stringify({
+          revision: o.version.revision,
+          audioKey: key,
+          ...(o.minutesBefore
+            ? { minutesBefore: o.minutesBefore, day: o.speechDay ?? 'today' }
+            : {}),
+        }),
         signal: requestSignal,
       });
     } catch {
@@ -187,6 +196,8 @@ export async function cleanup(snapshot: Snapshot) {
   const d = await db();
   await d.runAsync('DELETE FROM occurrences WHERE at<?', Date.now() - 30 * 86400000);
   const keep = new Set(snapshot.reminders.map((r) => r.content.audioKey).filter(Boolean));
+  for (const r of snapshot.reminders)
+    for (const speech of r.content.advanceSpeech ?? []) keep.add(speech.audioKey);
   const snoozes = await d.getAllAsync<{ payload: string }>('SELECT payload FROM snoozes');
   for (const s of snoozes) keep.add((JSON.parse(s.payload) as Occurrence).version.audioKey);
   const recent = await d.getAllAsync<{ payload: string }>('SELECT payload FROM occurrences');

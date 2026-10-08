@@ -2,7 +2,7 @@
 
 ## Yapılan kontroller
 
-- 41 otomatik test geçti: 7 ortak zamanlayıcı, 12 API/MongoDB entegrasyonu, 15 tablet motoru ve 7 yerel ses önbelleği testi.
+- 55 otomatik test geçti: 15 ortak zamanlayıcı, 14 API/MongoDB entegrasyonu, 18 tablet motoru ve 8 yerel ses önbelleği testi.
 - Tüm workspace TypeScript kontrolleri geçti.
 - React panel ve Node.js API production build'leri oluşturuldu.
 - Android için Expo JavaScript/Hermes dışa aktarımı alındı; APK/native derleme değildir.
@@ -38,6 +38,15 @@ Tablet istekleri React Native'in desteklediği AbortController ile iptal edilir.
 - Her okumaya 1,9 saniyelik yerel iki notalı ton eklendi; son 300 ms sessizdir. WAV dosyasında tepe genliği 0,32, oynatma seviyesi 0,65 olarak sınırlandı.
 - Otomatik testler konuşma hazır olmadan tonun başlamamasını, ton → konuşma sırasını, iptali, ton hatasında konuşmanın başlamamasını ve ton sırasında gelen duraklatma/sürüm/sessiz saat değişikliklerini kapsar.
 - Android dışa aktarımında ve iOS Release uygulamasında gömülü WAV dosyası doğrulandı. Tonu içeren sürüm iPad'e kuruldu ve açıldı.
+
+## Ön hatırlatmalar
+
+- En fazla iki farklı tam dakika değeri hem oluşturma hem düzenlemede sunucuda doğrulanır; eski kayıtların varsayılanı boş listedir.
+- 19:00 etkinliği için 18:00 / 18:30 / 19:00 sırası, Türkçe cümleler, ayrı olay kimlikleri, yeniden açılışta tekrar çalmama ve ön bildirimin ana duyuruyu engellememesi test edildi.
+- Tek seferlik/haftalık programlarda gece yarısı geçişi, saat dilimi ve yaz saati farkları; etkinlik başladıktan sonra geciken ön bildirimin atlanması test edildi.
+- API'de aile ayrımı, farklı ses anahtarları, istemciden metin enjekte edilememesi, silinen süre ve ses üretilirken değişen kişi adı doğrulandı.
+- Ön bildirim ve ana sesin ayrı dosyalarda tutulması ve çevrimdışı yeniden kullanımı test edildi.
+- Demo panelde ekleme, iki bildirim sınırı, mükerrer süre reddi, kaydetme ve düzenleyiciyi yeniden açma doğrulandı. 18:00 / 18:30 / 19:00 metin önizlemesi incelendi.
 
 ## Otomatik testlerin sınırları
 

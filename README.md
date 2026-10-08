@@ -26,6 +26,7 @@ Demo verileri yalnızca tarayıcıda saklanır. Gerçek hesapla karışmaz, ses 
 - Hesap oluşturma, oturum açma ve aileye özel veriler.
 - Aile üyeleri; günlük, haftanın belirli günlerinde veya tek seferlik rutinler.
 - Türkçe metin, ses, konuşma tarzı, saat dilimi ve sessiz saat ayarları.
+- Her rutin için en fazla iki ön hatırlatma; 1–1440 dakika önce, kişiye ve kalan süreye göre otomatik metin ve panelde duyuru önizlemesi.
 - Hatırlatıcıları metin olarak eşitleme; ilk okuma anında Gemini ile sese çevirme.
 - Sunucuda ses saklamadan, üretilen WAV dosyalarını tablette önbelleğe alma.
 - Tablet için 10 dakika geçerli 6 haneli eşleştirme kodu ve cihaz iptali.

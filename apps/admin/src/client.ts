@@ -1,6 +1,7 @@
 import {
   reminderInputSchema,
   defaultSettings,
+  advanceTexts,
   type Snapshot,
   type ReminderInput,
   type Settings,
@@ -144,7 +145,15 @@ export function demoSnapshot(): Snapshot {
           familyId: r.familyId,
           enabled: r.enabled,
           updatedAt: r.updatedAt,
-          content: { ...content, audioKey: content.audioKey ?? uuid() },
+          content: {
+            ...content,
+            audioKey: content.audioKey ?? uuid(),
+            advanceReminders: content.advanceReminders ?? [],
+            advanceSpeech: advanceTexts(
+              content,
+              saved.members.find((m: Member) => m.id === content.memberId)?.name,
+            ).map((s) => ({ ...s, audioKey: `demo-${s.minutesBefore}-${s.day}` })),
+          },
         };
       });
       localStorage.setItem(key, JSON.stringify(saved));
