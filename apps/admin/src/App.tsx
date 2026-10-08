@@ -1462,7 +1462,9 @@ function Editor({
         <fieldset className="recipient-picker">
           <legend>Kimin için?</legend>
           <p>
-            Birden fazla aile bireyi seçebilirsiniz. İsimler konuşmanın başına otomatik eklenir.
+            {form.memberIds.length
+              ? 'Birden fazla aile bireyi seçebilirsiniz. İsimler konuşmanın başına otomatik eklenir.'
+              : 'Tüm aile seçiliyken yalnızca yazdığınız metin okunur; başına isim veya hitap eklenmez.'}
           </p>
           <div className="recipient-options">
             <button
@@ -1504,7 +1506,10 @@ function Editor({
             placeholder="Minik dişlerimizi fırçalama zamanı!"
           />
           <span className="field-hint">
-            İsimleri ayrıca yazmanıza gerek yok. <span>{form.text.length}/400</span>
+            {form.memberIds.length
+              ? 'İsimleri ayrıca yazmanıza gerek yok.'
+              : 'Metin olduğu gibi seslendirilir.'}{' '}
+            <span>{form.text.length}/400</span>
           </span>
         </label>
         <button

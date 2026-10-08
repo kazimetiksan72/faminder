@@ -70,7 +70,7 @@ Tablet bağlantısı panelden kaldırılır. İptal bilgisi bir sonraki ağ iste
 
 Hatırlatıcıda bir veya birden fazla aile bireyi seçilebilir. İsimler ana duyuruya ve ön hatırlatmalara otomatik eklenir: “Ateş, satranç dersin başlıyor” veya “Ateş ve Bulut, çocuklar odanıza çıkma zamanınız geldi”. Metin alanına isimleri ayrıca yazmak gerekmez; mevcut metnin başındaki seçili kişi hitabı tekrar edilmez. İki ve daha fazla kişi için otomatik ders cümleleri çoğul hazırlanır. “Tüm aile” seçiminde ayrıca isim listesi eklenmez. Panelde okunacak tam metin önizlenebilir.
 
-Gemini'ye isimleri yumuşak biçimde vurgulaması ve ardından kısa bir duraklama yapması söylenir. Konuşma öncesi yerel uyarı tonu devam eder. Kişi seçimi değişince, metin aynı kalsa bile yeni hitap için ses önbelleği anahtarı değişir.
+Kişi seçiliyse Gemini'ye isimleri yumuşak biçimde vurgulaması ve ardından kısa bir duraklama yapması söylenir. “Tüm aile” seçiliyse yazılan cümle aynen gönderilir; Gemini'ye isim, selamlama veya başka sözcük eklememesi söylenir. Metne kullanıcının kendisinin yazdığı hitaplar korunur. Konuşma öncesi yerel uyarı tonu devam eder. Kişi seçimi değişince, metin aynı kalsa bile hitap ve ses talimatına uygun önbellek anahtarı kullanılır.
 
 Panelde **Ön hatırlatma ekle** ile iki farklı süre seçilebilir (1–1440 dakika). Etkinliğin asıl saatinde, “Saatinde tablet ne söylesin?” alanındaki metin okunur. Ön bildirimler kişi, başlık ve kalan süreye göre otomatik hazırlanır. En az bir saat kalan aynı gün etkinliklerinde “bugün”, önceki güne taşanlarda uygun gün ifadesi kullanılır. Gün hesabı etkinliğin saat dilimine göre yapılır.
 

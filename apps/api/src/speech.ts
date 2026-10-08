@@ -11,10 +11,23 @@ import {
 import { HttpError, hash } from './auth.js';
 
 export const model = () => process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-lite-tts';
-export const speechKey = (familyId: string, v: Pick<Version, 'text' | 'voice' | 'style'>) =>
-  hash(JSON.stringify(['addressed-v1', familyId, model(), v.text.trim(), v.voice, v.style]));
+type SpeechInput = Pick<Version, 'text' | 'voice' | 'style'> &
+  Partial<Pick<Version, 'memberId' | 'memberIds'>>;
+export const speechKey = (familyId: string, v: SpeechInput) =>
+  hash(
+    JSON.stringify([
+      reminderMemberIds(v).length ? 'addressed-v1' : 'verbatim-v1',
+      familyId,
+      model(),
+      v.text.trim(),
+      v.voice,
+      v.style,
+    ]),
+  );
 const addressStyle =
   'Gently emphasize the names addressed at the beginning, then pause briefly before reading the reminder. Keep the volume soft and natural. Read only the supplied text without adding words.';
+const verbatimStyle =
+  'Read only the supplied text verbatim. Do not add any greeting, salutation, names, introduction or closing words.';
 const styles = {
   warm: 'Warm, clear and friendly. Speak Turkish naturally, as a gentle family reminder.',
   calm: 'Calm, soft and unhurried. Speak Turkish clearly.',
@@ -39,7 +52,10 @@ export async function synthesize(v: Version, signal?: AbortSignal): Promise<Buff
               type: 'text',
               text: v.text,
               annotations: [
-                { type: 'speech_metadata', style: `${styles[v.style]} ${addressStyle}` },
+                {
+                  type: 'speech_metadata',
+                  style: `${styles[v.style]} ${reminderMemberIds(v).length ? addressStyle : verbatimStyle}`,
+                },
               ],
             },
           ],

@@ -2,7 +2,7 @@
 
 ## Yapılan kontroller
 
-- 68 otomatik test geçti: 20 ortak zamanlayıcı/metin, 17 API/MongoDB entegrasyonu, 18 tablet motoru, 8 yerel ses önbelleği ve 5 otomatik eşleştirme testi.
+- 69 otomatik test geçti: 20 ortak zamanlayıcı/metin, 18 API/MongoDB entegrasyonu, 18 tablet motoru, 8 yerel ses önbelleği ve 5 otomatik eşleştirme testi.
 - Tüm workspace TypeScript kontrolleri geçti.
 - React panel ve Node.js API production build'leri oluşturuldu.
 - Android için Expo JavaScript/Hermes dışa aktarımı alındı; APK/native derleme değildir.
@@ -61,6 +61,7 @@ Tablet istekleri React Native'in desteklediği AbortController ile iptal edilir.
 
 - Tekli, ikili ve üçlü isim birleştirme; eski tekli seçim; açıkça tüm aileye dönüş; mükerrer alıcı reddi; eski hitabın tekrarlanmaması; çoğul ön hatırlatma ve ana duyuru önizlemesi test edildi.
 - API'de başka aileye ait/olmayan kişi seçimi hem oluşturma hem düzenlemede reddedildi. Çoklu hatırlatmada kullanılan kişinin silinememesi, yalnızca kişi seçimi değişince ses anahtarının değişmesi, istemci metninin yok sayılması ve Gemini yanıtı sırasında isim değişikliğinin eski sesi iptal etmesi doğrulandı.
+- Bireysel seçimden “Tüm aile” seçimine geçildiğinde metnin aynen gönderildiği, eski `memberId` değerinin hitap eklemediği, isim vurgu talimatının kaldırıldığı ve farklı talimatların aynı ses önbelleğini paylaşmadığı test edildi. Metne elle yazılan isimler korunur.
 - Yerel demo panelinde iki kişiyi seçme, metin önizlemesi, kaydetme ve düzenleyiciyi yeniden açınca seçimlerin korunması tarayıcıda kontrol edildi. Panel ve API üretim derlemeleri başarılı.
 - Çoklu kişi isimlerini gösteren iOS Release sürümü 8 Ekim 20:02'de iPad'e kuruldu ve açıldı. Açılış konsolunda JavaScript hatası görülmedi. Gemini vurgu talimatı istek gövdesinde test edildi; bu değişiklik için yeni bir canlı hoparlör dinleme testi yapılmadı.
 

@@ -367,6 +367,51 @@ describe('family API with on-demand speech', () => {
 });
 
 describe('multi-member reminders', () => {
+  it('reads whole-family text verbatim after clearing recipients and uses a separate voice instruction/cache key', async () => {
+    const member = (
+      await alice.post('/api/members').set(header).send({ name: 'Bulut' }).expect(201)
+    ).body;
+    const text = 'Çocuklar, odanıza çıkma zamanınız geldi.';
+    const body = { ...input, text, memberIds: [member.id] };
+    const created = (await alice.post('/api/reminders').set(header).send(body).expect(201)).body.id;
+    const addressed = (await snapshot()).reminders.find((r: any) => r.id === created);
+    await alice
+      .put(`/api/reminders/${created}`)
+      .set(header)
+      .send({ ...body, memberId: member.id, memberIds: [] })
+      .expect(200);
+    const whole = (await snapshot()).reminders.find((r: any) => r.id === created);
+    expect(whole.content.memberIds).toEqual([]);
+    expect(whole.content.memberId).toBeNull();
+    expect(whole.content.text).toBe(text);
+    expect(whole.content.spokenText).toBe(text);
+    expect(whole.content.audioKey).not.toBe(addressed.content.audioKey);
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send(speechBody(whole))
+      .expect(200);
+    const spoken = JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).input[0]
+      .content[0];
+    expect(spoken.text).toBe(text);
+    expect(spoken.annotations[0].style).toContain('Read only the supplied text verbatim');
+    expect(spoken.annotations[0].style).not.toContain('emphasize the names');
+    // The exact same sentence needs distinct audio when the emphasis instruction differs.
+    expect(speechKey(familyId, { ...whole.content, text: addressed.content.spokenText })).not.toBe(
+      addressed.content.audioKey,
+    );
+    // Names intentionally authored in a whole-family message are still part of the text.
+    await alice
+      .put(`/api/reminders/${created}`)
+      .set(header)
+      .send({ ...body, memberIds: [], text: 'Bulut, ışıkları kapatır mısın?' })
+      .expect(200);
+    expect((await snapshot()).reminders.find((r: any) => r.id === created).content.spokenText).toBe(
+      'Bulut, ışıkları kapatır mısın?',
+    );
+    await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
+    await alice.delete(`/api/members/${member.id}`).set(header).expect(200);
+  });
   it('stores selections, speaks every selected name and invalidates audio after selection changes', async () => {
     const a = (await alice.post('/api/members').set(header).send({ name: 'Ateş' }).expect(201))
       .body;
