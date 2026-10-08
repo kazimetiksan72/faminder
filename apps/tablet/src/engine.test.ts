@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('react-native', () => ({ AppState: mocks.state }));
 vi.mock('expo-audio', () => ({ setAudioModeAsync: vi.fn(), createAudioPlayer: mocks.player }));
+vi.mock('./chime', () => ({ chimeSource: 101 }));
 vi.mock('./storage', () => ({
   get: async (key: string) => structuredClone(mocks.meta.get(key) ?? null),
   put: async (key: string, value: unknown) => {
@@ -81,6 +82,24 @@ function fixture(revision = 'old', enabled = true): Snapshot {
 const turns = async () => {
   for (let i = 0; i < 60; i++) await Promise.resolve();
 };
+function manualPlayback() {
+  let finish!: (s: unknown) => void;
+  const players: { volume: number; remove: ReturnType<typeof vi.fn> }[] = [];
+  mocks.player.mockImplementation(() => {
+    const player = {
+      volume: 1,
+      addListener: (_: string, cb: typeof finish) => {
+        finish = cb;
+        return { remove: vi.fn() };
+      },
+      play: vi.fn(),
+      remove: vi.fn(),
+    };
+    players.push(player);
+    return player;
+  });
+  return { finish: () => finish({ isLoaded: true, didJustFinish: true }), players };
+}
 beforeEach(() => {
   vi.stubGlobal('AbortSignal', class {});
   vi.useFakeTimers();
@@ -198,7 +217,7 @@ describe('text delivery and on-demand speech', () => {
     scheduler = new Scheduler(vi.fn(), vi.fn(), vi.fn(), 'device');
     await scheduler.start();
     await turns();
-    expect(mocks.player).toHaveBeenCalledTimes(1);
+    expect(mocks.player).toHaveBeenCalledTimes(2);
   });
   it('marks overdue routines missed instead of announcing a backlog', async () => {
     vi.setSystemTime(at + 10 * 60000);
@@ -239,26 +258,68 @@ describe('text delivery and on-demand speech', () => {
     expect(mocks.player).not.toHaveBeenCalled();
   });
   it('serializes sound checks and reminders, and cancels the queue on backgrounding', async () => {
-    let finish!: (s: unknown) => void;
-    mocks.player.mockImplementation(() => ({
-      volume: 1,
-      addListener: (_: string, cb: typeof finish) => {
-        finish = cb;
-        return { remove: vi.fn() };
-      },
-      play: vi.fn(),
-      remove: vi.fn(),
-    }));
+    const playback = manualPlayback();
     const first = playFile('test').catch((e) => e),
       second = playFile('reminder').catch((e) => e);
     await turns();
     expect(mocks.player).toHaveBeenCalledTimes(1);
-    finish({ didJustFinish: true });
+    expect(mocks.player.mock.calls[0][0]).toBe(101);
+    expect(playback.players[0].volume).toBeLessThan(1);
+    playback.finish();
     await turns();
     expect(mocks.player).toHaveBeenCalledTimes(2);
+    expect(mocks.player.mock.calls[1][0]).toBe('local/test.wav');
+    expect(playback.players[0].remove).toHaveBeenCalledOnce();
+    expect(playback.players[1].volume).toBe(1);
+    playback.finish();
+    await turns();
+    expect(mocks.player).toHaveBeenCalledTimes(3);
+    expect(mocks.player.mock.calls[2][0]).toBe(101);
     mocks.state.currentState = 'background';
     stopAudio();
     expect(await first).toBeUndefined();
     expect(await second).toBeInstanceOf(Error);
+    expect(playback.players[2].remove).toHaveBeenCalledOnce();
+    expect(mocks.player).toHaveBeenCalledTimes(3);
+  });
+  it('waits for speech preparation before starting the cue', async () => {
+    let ready!: () => void;
+    const speechReady = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const work = playFile('test', () => speechReady);
+    await turns();
+    expect(mocks.player).not.toHaveBeenCalled();
+    ready();
+    await work;
+    expect(mocks.player.mock.calls.map(([source]) => source)).toEqual([101, 'local/test.wav']);
+  });
+  it.each(['paused', 'revised', 'quiet'] as const)(
+    'rechecks the reminder after the cue when it becomes %s',
+    async (change) => {
+      const playback = manualPlayback();
+      scheduler = new Scheduler(vi.fn(), vi.fn(), vi.fn(), 'device');
+      await scheduler.start();
+      await turns();
+      expect(mocks.player).toHaveBeenCalledTimes(1);
+      const snapshot = fixture(change === 'revised' ? 'new' : 'old', change !== 'paused');
+      if (change === 'quiet') snapshot.family.quietStart = '20:00';
+      mocks.meta.set('snapshot', snapshot);
+      playback.finish();
+      await turns();
+      expect(mocks.player).toHaveBeenCalledTimes(1);
+      expect(mocks.statuses.map((s) => s.kind)).toEqual([
+        change === 'quiet' ? 'quiet' : 'interrupted',
+      ]);
+    },
+  );
+  it('does not start speech when the cue cannot finish', async () => {
+    const playback = manualPlayback();
+    const work = playFile('test').catch((e) => e);
+    await turns();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(await work).toBeInstanceOf(Error);
+    expect(mocks.player).toHaveBeenCalledTimes(1);
+    expect(playback.players[0].remove).toHaveBeenCalledOnce();
   });
 });

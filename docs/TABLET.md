@@ -59,6 +59,7 @@ Kod 10 dakika geçerlidir. Yenilemek için **Yeni kod al** kullanılabilir. Tabl
 - Android'in ekran sabitleme özelliğiyle uygulamanın yanlışlıkla kapatılmasını sınırlayabilirsiniz. Otomatik açılış ve tam yönetilen kiosk bu sürümde yoktur.
 - Otomatik tarih/saat açık olsun. Sunucu ile 1 dakikadan fazla fark algılanırsa uygulama bilgi verir.
 - Sessiz saatlerde rutin ekranda görünür, ses çalmaz. Ekrandaki ay simgesi yalnızca arayüz rengini koyulaştırır; sistem parlaklığını değiştirmez.
+- Her sesli duyurudan önce düşük sesli, iki notalı bir ton ve kısa bir duraklama duyulur. Ton ve duraklama toplam 1,9 saniyedir; ses denemesinde ve önbellekten okumada da çalar. Ton uygulamada gömülüdür; ek ağ isteği veya Gemini ücreti oluşturmaz. Kaynak dosya `node scripts/generate-chime.mjs` ile yeniden üretilebilir.
 - Uygulama arka plana alınır veya kapatılırsa zamanında seslendirme garanti edilmez. Arka plana geçiş mevcut sesi keser.
 
 Seslendirme sonrası **Tamamlandı** veya **5 dakika sonra** seçilebilir. Aynı dakikadaki duyurular sıraya girer; 2 dakikayı aşan gecikmeler seslendirilmeden “Kaçırıldı” kaydedilir.

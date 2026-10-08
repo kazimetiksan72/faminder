@@ -1,8 +1,9 @@
 import { AppState } from 'react-native';
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, type AudioSource } from 'expo-audio';
 import { occurrencesBetween, isQuiet, type Snapshot, type Occurrence } from '@faminder/shared';
 import * as store from './storage';
 import { withRequestSignal } from './request';
+import { chimeSource } from './chime';
 
 export const apiBase = () => process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') ?? '';
 export class ApiError extends Error {
@@ -97,10 +98,11 @@ export function stopAudio() {
   stopCurrent?.();
 }
 export function readReminder(o: Occurrence, token: string, verify?: () => Promise<void>) {
-  return playFile(o.version.audioKey, async (signal) => {
-    await store.ensureSpeech(o, apiBase(), token, signal);
-    await verify?.();
-  });
+  return playFile(
+    o.version.audioKey,
+    (signal) => store.ensureSpeech(o, apiBase(), token, signal),
+    verify,
+  );
 }
 class SkippedSpeech extends Error {
   constructor(public kind: 'quiet' | 'missed' | 'interrupted') {
@@ -110,6 +112,7 @@ class SkippedSpeech extends Error {
 export function playFile(
   audioKey: string,
   prepare?: (signal: AbortSignal) => Promise<void>,
+  verify?: () => Promise<void>,
 ): Promise<void> {
   const generation = playbackGeneration;
   const signal = speechController.signal;
@@ -121,44 +124,55 @@ export function playFile(
     check();
     await prepare?.(signal);
     check();
+    await verify?.();
+    check();
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: false,
       interruptionMode: 'doNotMix',
     });
     check();
-    const player = createAudioPlayer(store.audioPath(audioKey), { updateInterval: 250 });
-    player.volume = 1;
-    await new Promise<void>((resolve, reject) => {
-      let finished = false,
-        loaded = false;
-      const finish = (error?: Error) => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timeout);
-        subscription.remove();
-        player.remove();
-        stopCurrent = null;
-        error ? reject(error) : resolve();
-      };
-      const timeout = setTimeout(
-        () => finish(new Error(loaded ? 'Ses oynatma süresi aşıldı.' : 'Ses dosyası açılamadı.')),
-        90000,
-      );
-      const subscription = player.addListener('playbackStatusUpdate', (status) => {
-        if (status.isLoaded) loaded = true;
-        if (status.didJustFinish) finish();
-      });
-      stopCurrent = () => finish(new Error('Ses yarıda kesildi.'));
-      try {
-        player.play();
-      } catch (e) {
-        finish(e as Error);
-      }
-    });
+    // Prepare speech first so generation latency cannot separate the cue from the words.
+    // The quiet two-note asset includes a short silent tail before speech.
+    await playClip(chimeSource, 0.65, 10000);
+    check();
+    await verify?.();
+    check();
+    await playClip(store.audioPath(audioKey), 1, 90000);
   });
   playbackQueue = work.catch(() => {});
   return work;
+}
+async function playClip(source: AudioSource, volume: number, timeoutMs: number): Promise<void> {
+  const player = createAudioPlayer(source, { updateInterval: 100 });
+  player.volume = volume;
+  await new Promise<void>((resolve, reject) => {
+    let finished = false,
+      loaded = false;
+    const finish = (error?: Error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      subscription.remove();
+      player.remove();
+      stopCurrent = null;
+      error ? reject(error) : resolve();
+    };
+    const timeout = setTimeout(
+      () => finish(new Error(loaded ? 'Ses oynatma süresi aşıldı.' : 'Ses dosyası açılamadı.')),
+      timeoutMs,
+    );
+    const subscription = player.addListener('playbackStatusUpdate', (status) => {
+      if (status.isLoaded) loaded = true;
+      if (status.didJustFinish) finish();
+    });
+    stopCurrent = () => finish(new Error('Ses yarıda kesildi.'));
+    try {
+      player.play();
+    } catch (e) {
+      finish(e as Error);
+    }
+  });
 }
 export class Scheduler {
   private timer: ReturnType<typeof setInterval> | undefined;
