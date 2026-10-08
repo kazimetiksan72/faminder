@@ -48,6 +48,11 @@ import {
   durationLabel,
   reminderPreview,
   suggestedReminderText,
+  addressedText,
+  reminderBody,
+  reminderMemberIds,
+  recipientLabel,
+  selectedMembers,
   type Reminder,
   type ReminderInput,
   type Snapshot,
@@ -941,8 +946,11 @@ export default function App() {
                   <div className={`avatar large ${m.color}`}>{m.name[0]}</div>
                   <h2>{m.name}</h2>
                   <p>
-                    {data.reminders.filter((r) => r.content.memberId === m.id).length} kişisel
-                    hatırlatıcı
+                    {
+                      data.reminders.filter((r) => reminderMemberIds(r.content).includes(m.id))
+                        .length
+                    }{' '}
+                    kişisel hatırlatıcı
                   </p>
                   <button
                     className="text-button muted"
@@ -1290,7 +1298,7 @@ function RoutineCard({
 }) {
   const v = r.content,
     Icon = icons[v.icon];
-  const member = data.members.find((m) => m.id === v.memberId);
+  const members = selectedMembers(v, data.members);
   const delivered = data.devices.filter((d) => d.installed[r.id] === r.content?.revision).length;
   const status = !r.enabled
     ? 'Duraklatıldı'
@@ -1312,11 +1320,17 @@ function RoutineCard({
         <button onClick={onEdit}>
           <h3>{v.title}</h3>
         </button>
-        <p>{v.text}</p>
+        <p>
+          {v.spokenText ??
+            addressedText(
+              v.text,
+              members.map((m) => m.name),
+            )}
+        </p>
         <div className="routine-meta">
           <span className="person-tag">
-            <span className={`person-dot ${member?.color ?? 'sage'}`} />
-            {member?.name ?? 'Tüm aile'}
+            <span className={`person-dot ${members[0]?.color ?? 'sage'}`} />
+            {recipientLabel(members.map((m) => m.name)) || 'Tüm aile'}
           </span>
           {!!v.advanceReminders?.length && (
             <span className="advance-tag">
@@ -1374,11 +1388,20 @@ function Editor({
 }) {
   const [form, setForm] = useState<ReminderInput>(
     reminder
-      ? { ...reminder.content, advanceReminders: reminder.content.advanceReminders ?? [] }
+      ? {
+          ...reminder.content,
+          memberIds: reminderMemberIds(reminder.content),
+          text: reminderBody(
+            reminder.content.text,
+            selectedMembers(reminder.content, data.members).map((m) => m.name),
+          ),
+          advanceReminders: reminder.content.advanceReminders ?? [],
+        }
       : {
           title: '',
           text: '',
           memberId: null,
+          memberIds: [],
           color: 'sage',
           icon: 'sun',
           voice: 'Kore',
@@ -1396,8 +1419,8 @@ function Editor({
   const [error, setError] = useState('');
   const set = <K extends keyof ReminderInput>(k: K, v: ReminderInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
-  const memberName = data.members.find((m) => m.id === form.memberId)?.name;
-  const previewItems = reminderPreview(form, memberName);
+  const memberNames = selectedMembers(form, data.members).map((m) => m.name);
+  const previewItems = reminderPreview(form, memberNames);
   return (
     <Modal
       title={reminder ? 'Hatırlatıcıyı düzenleyin' : 'Güne küçük bir hatırlatıcı ekleyin'}
@@ -1436,6 +1459,40 @@ function Editor({
             placeholder="Örn. Diş fırçalama zamanı"
           />
         </label>
+        <fieldset className="recipient-picker">
+          <legend>Kimin için?</legend>
+          <p>
+            Birden fazla aile bireyi seçebilirsiniz. İsimler konuşmanın başına otomatik eklenir.
+          </p>
+          <div className="recipient-options">
+            <button
+              type="button"
+              aria-pressed={!form.memberIds.length}
+              onClick={() => set('memberIds', [])}
+            >
+              <Users size={15} /> Tüm aile
+            </button>
+            {data.members.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={form.memberIds.includes(m.id)}
+                onClick={() =>
+                  set(
+                    'memberIds',
+                    form.memberIds.includes(m.id)
+                      ? form.memberIds.filter((id) => id !== m.id)
+                      : [...form.memberIds, m.id],
+                  )
+                }
+              >
+                <span className={`person-dot ${m.color}`} />
+                {m.name}
+                {form.memberIds.includes(m.id) && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </fieldset>
         <label>
           Saatinde tablet ne söylesin?
           <textarea
@@ -1444,35 +1501,23 @@ function Editor({
             rows={3}
             value={form.text}
             onChange={(e) => set('text', e.target.value)}
-            placeholder="Elif, minik dişlerimizi fırçalama zamanı!"
+            placeholder="Minik dişlerimizi fırçalama zamanı!"
           />
           <span className="field-hint">
-            Metin yapay zekâ ile seslendirilecek. <span>{form.text.length}/400</span>
+            İsimleri ayrıca yazmanıza gerek yok. <span>{form.text.length}/400</span>
           </span>
         </label>
         <button
           type="button"
           className="text-button suggest-text"
           disabled={!form.title.trim()}
-          onClick={() => set('text', suggestedReminderText(form.title, memberName))}
+          onClick={() =>
+            set('text', reminderBody(suggestedReminderText(form.title, memberNames), memberNames))
+          }
         >
           <Sparkles size={14} /> Adına ve kişiye göre metin öner
         </button>
         <div className="form-grid">
-          <label>
-            Kimin için?
-            <select
-              value={form.memberId ?? ''}
-              onChange={(e) => set('memberId', e.target.value || null)}
-            >
-              <option value="">Tüm aile</option>
-              {data.members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             Saat
             <input
@@ -1621,7 +1666,7 @@ function Editor({
             1 dakika ile 24 saat arası seçebilirsin. En az 1 saat varsa “bugün” vurgulanır; geceyi
             aşarsa gün bilgisi değişir.
           </p>
-          {!!form.advanceReminders.length && !!form.title.trim() && (
+          {!!form.title.trim() && (form.text.trim() || form.advanceReminders.length > 0) && (
             <div className="announcement-preview" aria-label="Duyuru akışı">
               <h4>Tabletin söyleyecekleri</h4>
               {previewItems.map((o) => (

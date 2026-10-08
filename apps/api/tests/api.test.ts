@@ -365,3 +365,115 @@ describe('family API with on-demand speech', () => {
     await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
   });
 });
+
+describe('multi-member reminders', () => {
+  it('stores selections, speaks every selected name and invalidates audio after selection changes', async () => {
+    const a = (await alice.post('/api/members').set(header).send({ name: 'Ateş' }).expect(201))
+      .body;
+    const b = (await alice.post('/api/members').set(header).send({ name: 'Bulut' }).expect(201))
+      .body;
+    const body = {
+      ...input,
+      text: 'çocuklar odanıza çıkma zamanınız geldi',
+      memberIds: [a.id, b.id],
+      advanceReminders: [60, 15],
+      title: 'satranç dersi',
+    };
+    vi.mocked(fetch).mockClear();
+    const created = (await alice.post('/api/reminders').set(header).send(body).expect(201)).body.id;
+    let r = (await snapshot()).reminders.find((r: any) => r.id === created);
+    expect(r.content.memberIds).toEqual([a.id, b.id]);
+    expect(r.content.text).toBe(body.text);
+    expect(r.content.spokenText).toBe('Ateş ve Bulut, çocuklar odanıza çıkma zamanınız geldi');
+    expect(r.content.advanceSpeech[0].text).toContain('Ateş ve Bulut, bugün satranç dersiniz');
+    expect(fetch).not.toHaveBeenCalled();
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send({ ...speechBody(r), spokenText: 'Injected text', memberIds: [] })
+      .expect(200);
+    const spoken = JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).input[0]
+      .content[0];
+    expect(spoken.text).toBe(r.content.spokenText);
+    expect(spoken.annotations[0].style).toContain('Gently emphasize the names');
+    await alice.delete(`/api/members/${b.id}`).set(header).expect(409);
+    const old = r;
+    await alice
+      .put(`/api/reminders/${created}`)
+      .set(header)
+      .send({ ...body, memberIds: [a.id] })
+      .expect(200);
+    r = (await snapshot()).reminders.find((r: any) => r.id === created);
+    expect(r.content.spokenText).toBe('Ateş, çocuklar odanıza çıkma zamanınız geldi');
+    expect(r.content.text).toBe(old.content.text);
+    expect(r.content.audioKey).not.toBe(old.content.audioKey);
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send(speechBody(old))
+      .expect(409);
+    // A name changing during synthesis must also invalidate the main announcement.
+    vi.mocked(fetch).mockImplementationOnce(async () => {
+      await (await db()).collection('members').updateOne({ id: a.id }, { $set: { name: 'Deniz' } });
+      return generated();
+    });
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send(speechBody(r))
+      .expect(409);
+    await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
+    await alice.delete(`/api/members/${a.id}`).set(header).expect(200);
+    await alice.delete(`/api/members/${b.id}`).set(header).expect(200);
+  });
+  it('rejects foreign, missing and duplicate recipients on both create and update', async () => {
+    const foreign = (
+      await bob.post('/api/members').set(header).send({ name: 'Other family' }).expect(201)
+    ).body;
+    const created = (await alice.post('/api/reminders').set(header).send(input).expect(201)).body
+      .id;
+    for (const memberIds of [[foreign.id], ['missing-member'], [foreign.id, foreign.id]]) {
+      await alice
+        .post('/api/reminders')
+        .set(header)
+        .send({ ...input, memberIds })
+        .expect(400);
+      await alice
+        .put(`/api/reminders/${created}`)
+        .set(header)
+        .send({ ...input, memberIds })
+        .expect(400);
+    }
+    await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
+  });
+  it('reads actual legacy memberId records without duplicating names or rewriting stored data', async () => {
+    const member = (await alice.post('/api/members').set(header).send({ name: 'Ateş' }).expect(201))
+      .body;
+    const created = (
+      await alice
+        .post('/api/reminders')
+        .set(header)
+        .send({ ...input, text: 'Ateş, satranç dersin başlıyor', memberId: member.id })
+        .expect(201)
+    ).body.id;
+    const d = await db();
+    await d
+      .collection('reminders')
+      .updateOne({ id: created }, { $unset: { 'content.memberIds': '' } });
+    const before = await d.collection('reminders').findOne({ id: created });
+    const r = (await snapshot()).reminders.find((r: any) => r.id === created);
+    expect(r.content.memberIds).toEqual([member.id]);
+    expect(r.content.text).toBe('satranç dersin başlıyor');
+    expect(r.content.spokenText).toBe('Ateş, satranç dersin başlıyor');
+    await alice
+      .post(`/api/reminders/${created}/speech`)
+      .set(header)
+      .send(speechBody(r))
+      .expect(200);
+    expect(
+      JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).input[0].content[0].text,
+    ).toBe(r.content.spokenText);
+    expect(await d.collection('reminders').findOne({ id: created })).toEqual(before);
+    await alice.delete(`/api/reminders/${created}`).set(header).expect(200);
+  });
+});

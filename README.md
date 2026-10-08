@@ -32,6 +32,7 @@ Demo verileri yalnızca tarayıcıda saklanır. Gerçek hesapla karışmaz, ses 
 - Tablet için 10 dakika geçerli 6 haneli eşleştirme kodu ve cihaz iptali.
 - Tablette SQLite programı ve yerel zamanlayıcı. Daha önce üretilmiş sesler çevrimdışı çalar; yeni metnin ilk okuması internet gerektirir.
 - Dokunma gerektirmeyen tablet ekranı, otomatik seslendirme ve geçmiş kayıtları.
+- Bir hatırlatıcıda birden fazla aile bireyi seçimi; konuşmanın başında isimlerle hitap.
 - Metin değişikliklerini hemen uygulama; değişen metne eski sesi kullanmama ve yinelenen duyuruları engelleme.
 
 ## Vercel

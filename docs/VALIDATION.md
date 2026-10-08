@@ -2,7 +2,7 @@
 
 ## Yapılan kontroller
 
-- 60 otomatik test geçti: 15 ortak zamanlayıcı, 14 API/MongoDB entegrasyonu, 18 tablet motoru, 8 yerel ses önbelleği ve 5 otomatik eşleştirme testi.
+- 68 otomatik test geçti: 20 ortak zamanlayıcı/metin, 17 API/MongoDB entegrasyonu, 18 tablet motoru, 8 yerel ses önbelleği ve 5 otomatik eşleştirme testi.
 - Tüm workspace TypeScript kontrolleri geçti.
 - React panel ve Node.js API production build'leri oluşturuldu.
 - Android için Expo JavaScript/Hermes dışa aktarımı alındı; APK/native derleme değildir.
@@ -56,6 +56,13 @@ Tablet istekleri React Native'in desteklediği AbortController ile iptal edilir.
 - Eşleştirme kodunun süresi dolunca yenilenmesi, çevrimdışı açılıştan ve ağ hatasından toparlanma, sunucunun süresi dolan kodu reddetmesi ve çakışan/gecikmiş isteklerin önlenmesi beş yeni testle doğrulandı.
 - Duyuru sonucu 15 saniye görünür; program listesi üçerli gruplar halinde otomatik değişir. Görevin tamamlandığına dair otomatik kayıt oluşturulmaz.
 - Bu sürümün imzalı iOS Release derlemesi doğrulandı; 8 Ekim 19:49'da iPad'e kuruldu ve açıldı. Üretim API'sinde cihazın yeni bağlantısı görüldü; açılış konsolunda JavaScript hatası görülmedi.
+
+## Çoklu aile bireyi ve isimli hitap
+
+- Tekli, ikili ve üçlü isim birleştirme; eski tekli seçim; açıkça tüm aileye dönüş; mükerrer alıcı reddi; eski hitabın tekrarlanmaması; çoğul ön hatırlatma ve ana duyuru önizlemesi test edildi.
+- API'de başka aileye ait/olmayan kişi seçimi hem oluşturma hem düzenlemede reddedildi. Çoklu hatırlatmada kullanılan kişinin silinememesi, yalnızca kişi seçimi değişince ses anahtarının değişmesi, istemci metninin yok sayılması ve Gemini yanıtı sırasında isim değişikliğinin eski sesi iptal etmesi doğrulandı.
+- Yerel demo panelinde iki kişiyi seçme, metin önizlemesi, kaydetme ve düzenleyiciyi yeniden açınca seçimlerin korunması tarayıcıda kontrol edildi. Panel ve API üretim derlemeleri başarılı.
+- Çoklu kişi isimlerini gösteren iOS Release sürümü 8 Ekim 20:02'de iPad'e kuruldu ve açıldı. Açılış konsolunda JavaScript hatası görülmedi. Gemini vurgu talimatı istek gövdesinde test edildi; bu değişiklik için yeni bir canlı hoparlör dinleme testi yapılmadı.
 
 ## Otomatik testlerin sınırları
 

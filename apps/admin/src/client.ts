@@ -2,6 +2,10 @@ import {
   reminderInputSchema,
   defaultSettings,
   advanceTexts,
+  addressedText,
+  reminderBody,
+  reminderMemberIds,
+  selectedMembers,
   type Snapshot,
   type ReminderInput,
   type Settings,
@@ -140,6 +144,7 @@ export function demoSnapshot(): Snapshot {
       const saved = JSON.parse(value);
       saved.reminders = saved.reminders.map((r: any) => {
         const { audioId: _legacyFile, ...content } = r.content ?? r.desired;
+        const names = selectedMembers(content, saved.members).map((m) => m.name);
         return {
           id: r.id,
           familyId: r.familyId,
@@ -147,12 +152,15 @@ export function demoSnapshot(): Snapshot {
           updatedAt: r.updatedAt,
           content: {
             ...content,
+            memberIds: reminderMemberIds(content),
+            text: reminderBody(content.text, names),
+            spokenText: addressedText(content.text, names),
             audioKey: content.audioKey ?? uuid(),
             advanceReminders: content.advanceReminders ?? [],
-            advanceSpeech: advanceTexts(
-              content,
-              saved.members.find((m: Member) => m.id === content.memberId)?.name,
-            ).map((s) => ({ ...s, audioKey: `demo-${s.minutesBefore}-${s.day}` })),
+            advanceSpeech: advanceTexts(content, names).map((s) => ({
+              ...s,
+              audioKey: `demo-${s.minutesBefore}-${s.day}`,
+            })),
           },
         };
       });
@@ -216,7 +224,7 @@ export const client = {
   removeMember: async (id: string) => {
     if (!isDemo()) return request(`/members/${id}`, undefined, 'DELETE');
     mutate((s) => {
-      if (s.reminders.some((r) => r.content.memberId === id))
+      if (s.reminders.some((r) => reminderMemberIds(r.content).includes(id)))
         throw new Error('Önce bu kişinin rutinlerini başka bir kişiye atayın.');
       s.members = s.members.filter((m) => m.id !== id);
     });

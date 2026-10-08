@@ -1,9 +1,20 @@
-import { advanceTexts, type Version, type Reminder } from '@faminder/shared';
+import {
+  advanceTexts,
+  addressedText,
+  reminderBody,
+  reminderMemberIds,
+  selectedMembers,
+  type Member,
+  type Version,
+  type Reminder,
+} from '@faminder/shared';
 import { HttpError, hash } from './auth.js';
 
 export const model = () => process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-lite-tts';
 export const speechKey = (familyId: string, v: Pick<Version, 'text' | 'voice' | 'style'>) =>
-  hash(JSON.stringify([familyId, model(), v.text.trim(), v.voice, v.style]));
+  hash(JSON.stringify(['addressed-v1', familyId, model(), v.text.trim(), v.voice, v.style]));
+const addressStyle =
+  'Gently emphasize the names addressed at the beginning, then pause briefly before reading the reminder. Keep the volume soft and natural. Read only the supplied text without adding words.';
 const styles = {
   warm: 'Warm, clear and friendly. Speak Turkish naturally, as a gentle family reminder.',
   calm: 'Calm, soft and unhurried. Speak Turkish clearly.',
@@ -27,7 +38,9 @@ export async function synthesize(v: Version, signal?: AbortSignal): Promise<Buff
             {
               type: 'text',
               text: v.text,
-              annotations: [{ type: 'speech_metadata', style: styles[v.style] }],
+              annotations: [
+                { type: 'speech_metadata', style: `${styles[v.style]} ${addressStyle}` },
+              ],
             },
           ],
         },
@@ -66,14 +79,21 @@ export async function synthesize(v: Version, signal?: AbortSignal): Promise<Buff
 }
 
 // Read older deployments without rewriting or deleting existing family data.
-export function textReminder(row: Record<string, any>, memberName?: string): Reminder {
+export function textReminder(row: Record<string, any>, members: Member[] = []): Reminder {
   const { audioId: _legacyFile, ...source } = row.content ?? row.desired;
+  const memberIds = reminderMemberIds(source);
+  const names = selectedMembers(source, members).map((m) => m.name);
+  const spokenText = addressedText(source.text, names);
   const content: Version = {
     ...source,
+    memberIds,
+    memberId: memberIds.length === 1 ? memberIds[0] : null,
+    text: reminderBody(source.text, names),
+    spokenText,
     enabled: row.enabled,
     advanceReminders: source.advanceReminders ?? [],
-    audioKey: speechKey(row.familyId, source),
-    advanceSpeech: advanceTexts(source, memberName).map((s) => ({
+    audioKey: speechKey(row.familyId, { ...source, text: spokenText }),
+    advanceSpeech: advanceTexts(source, names).map((s) => ({
       ...s,
       audioKey: speechKey(row.familyId, { ...source, text: s.text }),
     })),

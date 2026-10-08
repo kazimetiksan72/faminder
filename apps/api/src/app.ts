@@ -11,6 +11,8 @@ import {
   settingsSchema,
   defaultSettings,
   announcementVersion,
+  reminderMemberIds,
+  type Member,
   type Version,
 } from '@faminder/shared';
 import { db, initialize } from './db.js';
@@ -180,9 +182,7 @@ app.get('/api/snapshot', async (req, res) => {
   res.set('Cache-Control', 'no-store').json({
     family,
     members,
-    reminders: reminders.map((row) =>
-      textReminder(row, members.find((m) => m.id === (row.content ?? row.desired)?.memberId)?.name),
-    ),
+    reminders: reminders.map((row) => textReminder(row, members as unknown as Member[])),
     devices,
     events,
     serverTime: new Date().toISOString(),
@@ -206,7 +206,9 @@ app.delete('/api/members/:id', admin, async (req, res) => {
       familyId,
       deleted: { $ne: true },
       $or: [
+        { 'content.memberIds': req.params.id },
         { 'content.memberId': req.params.id },
+        { content: { $exists: false }, 'desired.memberIds': req.params.id },
         { content: { $exists: false }, 'desired.memberId': req.params.id },
       ],
     })
@@ -222,14 +224,19 @@ app.put('/api/settings', admin, async (req, res) => {
     .updateOne({ id: req.principal.familyId }, { $set: settings });
   res.json({ ok: true });
 });
-async function validateMember(familyId: string, memberId: string | null) {
-  if (memberId && !(await (await db()).collection('members').findOne({ id: memberId, familyId })))
-    throw new HttpError(400, 'Aile üyesi bulunamadı.');
+async function validateMembers(familyId: string, memberIds: string[]) {
+  if (
+    memberIds.length &&
+    (await (await db())
+      .collection('members')
+      .countDocuments({ id: { $in: memberIds }, familyId })) !== memberIds.length
+  )
+    throw new HttpError(400, 'Seçilen aile bireylerinden biri bulunamadı.');
 }
 app.post('/api/reminders', admin, async (req, res) => {
   const input = reminderInputSchema.parse(req.body);
   const familyId = req.principal.familyId;
-  await validateMember(familyId, input.memberId);
+  await validateMembers(familyId, input.memberIds);
   await rateLimit(`create:${familyId}`, 60, 60);
   const now = new Date().toISOString();
   const content: Version = {
@@ -252,7 +259,7 @@ app.post('/api/reminders', admin, async (req, res) => {
 app.put('/api/reminders/:id', admin, async (req, res) => {
   const input = reminderInputSchema.parse(req.body);
   const familyId = req.principal.familyId;
-  await validateMember(familyId, input.memberId);
+  await validateMembers(familyId, input.memberIds);
   const d = await db();
   const r = await d
     .collection('reminders')
@@ -430,12 +437,17 @@ app.post('/api/reminders/:id/speech', async (req, res) => {
   const row = await d.collection('reminders').findOne(query);
   if (!row) throw new HttpError(404, 'Hatırlatıcı bulunamadı.');
   const resolve = async (value: Record<string, any>) => {
-    const memberId = (value.content ?? value.desired)?.memberId;
-    const member =
-      minutesBefore && memberId
-        ? await d.collection('members').findOne({ id: memberId, familyId: req.principal.familyId })
-        : null;
-    return textReminder(value, member?.name);
+    const memberIds = reminderMemberIds(value.content ?? value.desired);
+    const members = memberIds.length
+      ? await d
+          .collection('members')
+          .find(
+            { id: { $in: memberIds }, familyId: req.principal.familyId },
+            { projection: { _id: 0, id: 1, name: 1, color: 1 } },
+          )
+          .toArray()
+      : [];
+    return textReminder(value, members as unknown as Member[]);
   };
   const reminder = await resolve(row);
   const version = announcementVersion(reminder.content, minutesBefore, day);

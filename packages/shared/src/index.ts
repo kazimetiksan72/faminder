@@ -28,25 +28,35 @@ export const scheduleSchema = z
     )
       ctx.addIssue({ code: 'custom', message: 'Geçerli bir tarih seçin.', path: ['date'] });
   });
-export const reminderInputSchema = z.object({
-  title: z.string().trim().min(1).max(80),
-  text: z.string().trim().min(1).max(400),
-  memberId: z.string().nullable().default(null),
-  color: z.enum(colors).default('sage'),
-  icon: z.enum(['sun', 'book', 'brush', 'moon', 'meal', 'heart']).default('sun'),
-  voice: z.enum(voices).default('Kore'),
-  style: z.enum(['warm', 'calm', 'cheerful']).default('warm'),
-  schedule: scheduleSchema,
-  advanceReminders: z
-    .array(z.number().int().min(1).max(1440))
-    .max(2, 'En fazla iki ön hatırlatma ekleyebilirsiniz.')
-    .refine(
-      (values) => new Set(values).size === values.length,
-      'Ön hatırlatma süreleri farklı olmalı.',
-    )
-    .default([]),
-  enabled: z.boolean().default(true),
-});
+export const reminderInputSchema = z
+  .object({
+    title: z.string().trim().min(1).max(80),
+    text: z.string().trim().min(1).max(400),
+    memberId: z.string().nullable().default(null),
+    memberIds: z
+      .array(z.string().min(1))
+      .max(100)
+      .refine((ids) => new Set(ids).size === ids.length, 'Aynı kişi birden fazla seçilemez.')
+      .optional(),
+    color: z.enum(colors).default('sage'),
+    icon: z.enum(['sun', 'book', 'brush', 'moon', 'meal', 'heart']).default('sun'),
+    voice: z.enum(voices).default('Kore'),
+    style: z.enum(['warm', 'calm', 'cheerful']).default('warm'),
+    schedule: scheduleSchema,
+    advanceReminders: z
+      .array(z.number().int().min(1).max(1440))
+      .max(2, 'En fazla iki ön hatırlatma ekleyebilirsiniz.')
+      .refine(
+        (values) => new Set(values).size === values.length,
+        'Ön hatırlatma süreleri farklı olmalı.',
+      )
+      .default([]),
+    enabled: z.boolean().default(true),
+  })
+  .transform((input) => {
+    const memberIds = reminderMemberIds(input);
+    return { ...input, memberIds, memberId: memberIds.length === 1 ? memberIds[0] : null };
+  });
 export const settingsSchema = z.object({
   timezone: timezoneSchema,
   quietStart: clockSchema,
@@ -63,6 +73,7 @@ export type Version = ReminderInput & {
   audioKey: string;
   createdAt: string;
   advanceSpeech?: AdvanceSpeech[];
+  spokenText?: string;
 };
 export type SpeechDay = 'today' | 'tomorrow' | 'dayAfterTomorrow';
 export type AdvanceSpeech = {
@@ -131,6 +142,51 @@ export const defaultSettings: Settings = {
 };
 export const dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
+// An explicit empty list means the whole family, including for legacy clients.
+export function reminderMemberIds(input: {
+  memberIds?: string[];
+  memberId?: string | null;
+}): string[] {
+  return input.memberIds ?? (input.memberId ? [input.memberId] : []);
+}
+export function selectedMembers(
+  input: { memberIds?: string[]; memberId?: string | null },
+  members: Member[],
+): Member[] {
+  return reminderMemberIds(input).flatMap((id) => {
+    const member = members.find((m) => m.id === id);
+    return member ? [member] : [];
+  });
+}
+type Recipients = string | string[];
+const namesList = (names?: Recipients): string[] =>
+  (typeof names === 'string' ? [names] : (names ?? [])).map((name) => name.trim()).filter(Boolean);
+export function recipientLabel(names?: Recipients): string {
+  const list = namesList(names);
+  return list.length < 2 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} ve ${list.at(-1)}`;
+}
+export function reminderBody(text: string, names?: Recipients): string {
+  const body = text.trim();
+  // Older reminders often already start with the selected person's name.
+  const prefixes = [recipientLabel(names), ...namesList(names)]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  for (const prefix of prefixes) {
+    if (!body.toLocaleLowerCase('tr-TR').startsWith(prefix.toLocaleLowerCase('tr-TR'))) continue;
+    const rest = body.slice(prefix.length);
+    if (/^\s*[,!:]/.test(rest)) {
+      const stripped = rest.replace(/^\s*[,!:]\s*/, '');
+      if (stripped) return stripped;
+    }
+  }
+  return body;
+}
+export function addressedText(text: string, names?: Recipients): string {
+  const who = recipientLabel(names);
+  const body = reminderBody(text, names);
+  return who && body ? `${who}, ${body}` : body;
+}
+
 export function durationLabel(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
@@ -139,30 +195,34 @@ export function durationLabel(minutes: number): string {
 export function advanceText(
   title: string,
   minutes: number,
-  name?: string,
+  name?: Recipients,
   day: SpeechDay = 'today',
 ) {
   const activity = title.trim().replace(/[.!?]+$/, '');
-  const who = name ? `${name}, ` : '';
+  const names = namesList(name);
+  const who = names.length ? `${recipientLabel(names)}, ` : '';
   const when = day === 'today' ? 'bugün' : day === 'tomorrow' ? 'yarın' : 'öbür gün';
-  const lesson = name && / dersi$/i.test(activity);
-  const subject = lesson ? activity.replace(/dersi$/i, 'dersin') : activity;
+  const lesson = names.length > 0 && / dersi$/i.test(activity);
+  const subject = lesson
+    ? activity.replace(/dersi$/i, names.length > 1 ? 'dersiniz' : 'dersin')
+    : activity;
   if (minutes >= 60)
     return `${who}${when} ${subject} var. ${lesson ? 'Derse' : 'Başlamasına'} ${durationLabel(minutes)} kaldı.`;
   return lesson
-    ? `${who}${activity.replace(/dersi$/i, 'dersine')} ${durationLabel(minutes)} kaldı.`
+    ? `${who}${activity.replace(/dersi$/i, names.length > 1 ? 'dersinize' : 'dersine')} ${durationLabel(minutes)} kaldı.`
     : `${who}${activity} için ${durationLabel(minutes)} kaldı.`;
 }
-export function suggestedReminderText(title: string, name?: string): string {
+export function suggestedReminderText(title: string, name?: Recipients): string {
   const activity = title.trim().replace(/[.!?]+$/, '');
-  const who = name ? `${name}, ` : '';
+  const names = namesList(name);
+  const who = names.length ? `${recipientLabel(names)}, ` : '';
   if (/ dersi$/i.test(activity))
-    return `${who}${name ? activity.replace(/dersi$/i, 'dersin') : activity} başladı. İyi dersler.`;
+    return `${who}${names.length ? activity.replace(/dersi$/i, names.length > 1 ? 'dersiniz' : 'dersin') : activity} başladı. İyi dersler.`;
   return `${who}${activity.replace(/ zamanı$/i, '')} zamanı.`;
 }
 export function advanceTexts(
   input: Pick<ReminderInput, 'title' | 'advanceReminders'>,
-  name?: string,
+  name?: Recipients,
 ) {
   return (input.advanceReminders ?? []).flatMap((minutesBefore) =>
     (['today', 'tomorrow', 'dayAfterTomorrow'] as const).map((day) => ({
@@ -177,7 +237,7 @@ export function announcementVersion(
   minutesBefore = 0,
   day: SpeechDay = 'today',
 ): Version | null {
-  if (!minutesBefore) return v;
+  if (!minutesBefore) return v.spokenText ? { ...v, text: v.spokenText } : v;
   if (!v.advanceReminders?.includes(minutesBefore)) return null;
   const speech = v.advanceSpeech?.find((s) => s.minutesBefore === minutesBefore && s.day === day);
   return speech ? { ...v, text: speech.text, audioKey: speech.audioKey } : null;
@@ -251,7 +311,7 @@ export function nextOccurrence(
   }
   return occurrencesBetween(reminder, now, now + 8 * 86400000)[0] ?? null;
 }
-export function reminderPreview(input: ReminderInput, name?: string): Occurrence[] {
+export function reminderPreview(input: ReminderInput, name?: Recipients): Occurrence[] {
   if (!scheduleSchema.safeParse(input.schedule).success) return [];
   input = {
     ...input,
@@ -264,6 +324,7 @@ export function reminderPreview(input: ReminderInput, name?: string): Occurrence
     revision: 'preview',
     audioKey: 'preview',
     createdAt: '',
+    spokenText: addressedText(input.text, name),
     advanceSpeech: advanceTexts(input, name).map((s) => ({ ...s, audioKey: 'preview' })),
   };
   const reminder = { id: 'preview', enabled: true, content: version };

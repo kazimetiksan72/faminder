@@ -7,6 +7,8 @@ import {
   nextOccurrence,
   isQuiet,
   durationLabel,
+  recipientLabel,
+  selectedMembers,
   type Snapshot,
   type Occurrence,
 } from '@faminder/shared';
@@ -359,7 +361,9 @@ function Wall() {
                       weekday: 'long',
                     }).format(new Date(o!.scheduledAt))}{' '}
                     ·{' '}
-                    {snapshot.members.find((m) => m.id === r.content!.memberId)?.name ?? 'Tüm aile'}
+                    {recipientLabel(
+                      selectedMembers(r.content!, snapshot.members).map((m) => m.name),
+                    ) || 'Tüm aile'}
                   </Text>
                 </View>
               </View>

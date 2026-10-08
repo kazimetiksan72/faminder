@@ -1299,6 +1299,48 @@ textarea::placeholder {
   display: flex;
   gap: 8px;
 }
+.recipient-picker {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.recipient-picker legend {
+  color: #61764f;
+  font-size: 12px;
+  font-weight: 600;
+}
+.recipient-picker p {
+  color: #7d8b70;
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 7px 0 11px;
+}
+.recipient-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.recipient-options button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #dce5d4;
+  border-radius: 9px;
+  padding: 10px 13px;
+  color: #647855;
+  background: #fff;
+  font-size: 12px;
+}
+.recipient-options button[aria-pressed='true'] {
+  background: #eaf1e2;
+  border-color: #91ad7d;
+  color: #345a2c;
+}
+.recipient-options button:focus-visible {
+  outline: 2px solid #537c4a;
+  outline-offset: 3px;
+}
 .day-picker button {
   flex: 1;
   border: 1px solid #e4eadd;

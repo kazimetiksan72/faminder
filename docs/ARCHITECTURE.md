@@ -21,6 +21,10 @@ Metin güncellemeleri ilk eşitlemede etkinleşir. Yeni metnin sesi üretilemiyo
 
 ## Okuma ve önbellek
 
+Hatırlatıcı alıcıları sıralı `memberIds` listesinde tutulur; boş liste tüm aileyi ifade eder. Eski tek kişilik `memberId` kayıtları okunurken bu listeye dönüştürülür. Seçilen tüm kişilerin aynı aileye ait olması oluşturma ve düzenlemede doğrulanır. Kullanımdaki kişi, çoklu seçimde de silinemez. Veritabanındaki `text` düzenlenebilir metindir; snapshot'ta `spokenText` isimlerle oluşturulmuş konuşmayı taşır. Eski metinlerde seçili kişiye ait başlangıç hitabı görünümde ayrıştırılır; okuma sırasında veritabanı yeniden yazılmaz.
+
+Ana duyuru ve ön hatırlatmalar aynı Türkçe isim birleştirmesini kullanır. Gemini isteği istemciden gelen isim/metinleri kullanmaz; güncel aile üyeleri ve kayıtlı metinden yeniden hazırlanır. Ses üretildikten sonra kişiler tekrar okunur ve ses anahtarı yeniden doğrulanır. Önbellek anahtarı hitap dahil tam konuşma ve ses talimatı sürümünü içerir.
+
 Zamanlayıcı, zamanı gelen rutinin yerel ses dosyasını arar. Dosya yoksa kimlik doğrulamalı `POST /api/reminders/:id/speech` isteği gönderir. Sunucu ailenin metnini MongoDB'den alır ve Gemini'ye iletir. Yanıt WAV olarak tablete geçer; sunucuda ses saklanmaz. API anahtarı hiçbir istemciye gönderilmez.
 
 Ses anahtarı aile, model, metin, ses ve tarzın SHA-256 özetidir. Saat/renk gibi değişiklikler dosyayı yeniden kullanabilir. Tablet WAV başlığını, boyutunu ve yanıt anahtarını doğrular; geçici dosyaya yazıp atomik olarak taşır. İlk üretim internet gerektirir; önbellekteki aynı metin çevrimdışı okunabilir. Her tablet kendi önbelleğine sahiptir. Paneldeki ses önizlemesi her tıklamada yeni Gemini çağrısı yapar.
