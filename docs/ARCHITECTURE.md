@@ -31,9 +31,9 @@ Sunucu üretim sonrasında sürümü, silinme/duraklatma durumunu ve cihaz iptal
 
 Programlar IANA saat dilimleriyle hesaplanır. Yaz saati geçişinde var olmayan saat atlanır; iki kez oluşan saat ilk oluşumunda bir kez çalışır. Olay kimliği rutin ve planlanan UTC anıdır; içerik sürümü değişikliği aynı andaki hatırlatmayı ikinci kez okutmaz.
 
-SQLite'ta oynatmadan önce atomik `claim` alınır. Ses sırasında uygulama kapanırsa sonraki açılışta “Yarıda kesildi” olarak işaretlenir, otomatik yeniden okunmaz. Bu, yinelenen duyuruları önleyen **at-most-once** tercihidir; sesin sonuna kadar dinlendiği garantisi değildir. “Seslendirildi” ses oynatıcısının bitiş olayını, “Tamamlandı” kullanıcının dokunmasını gösterir.
+SQLite'ta oynatmadan önce atomik `claim` alınır. Ses sırasında uygulama kapanırsa sonraki açılışta “Yarıda kesildi” olarak işaretlenir, otomatik yeniden okunmaz. Bu, yinelenen duyuruları önleyen **at-most-once** tercihidir; sesin sonuna kadar dinlendiği garantisi değildir. “Seslendirildi” ses oynatıcısının bitiş olayıdır. Tablet arayüzü yalnızca görüntüler ve seslendirir; tamamlanma veya erteleme işlemi sunmaz. Eski sürümlerdeki kullanıcı onaylarından kalan “Tamamlandı” kayıtları geçmişte korunur.
 
-2 dakikayı aşan gecikme “Kaçırıldı” olur. Açılışta en fazla son 24 saat değerlendirilir; uzun kapanma döneminin tüm geçmişi oluşturulmaz. Ekran/işletim sistemi duraklaması ve yanlış cihaz saati kesin zamanlamayı etkiler. Sessiz saatler aile saat diliminde değerlendirilir. Erteleme 5 dakikadır; rutin duraklatılır/silinir veya sürümü değişirse bekleyen eski erteleme iptal edilir.
+2 dakikayı aşan gecikme “Kaçırıldı” olur. Açılışta en fazla son 24 saat değerlendirilir; uzun kapanma döneminin tüm geçmişi oluşturulmaz. Ekran/işletim sistemi duraklaması ve yanlış cihaz saati kesin zamanlamayı etkiler. Sessiz saatler aile saat diliminde değerlendirilir. Eski sürümden kalan 5 dakikalık ertelemeler işlenebilir; rutin duraklatılır/silinir veya sürümü değişirse bekleyen eski erteleme iptal edilir.
 
 Olaylar SQLite outbox'ta saklanır, ağ geldiğinde idempotent olarak yüklenir. Sunucudan kabul yanıtı gelmeden silinmez. Yerel geçmiş 30 gün tutulur; eski sesler son 30 günlük geçmişte veya bekleyen bir ertelemede kullanılıyorsa korunur. Sunucuda ses arşivi yoktur. Sunucudaki olay geçmişinde otomatik süreli silme henüz yoktur.
 

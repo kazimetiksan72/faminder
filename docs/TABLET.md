@@ -49,28 +49,28 @@ Yön ayarları `app.json` dosyasında saklanır. Android 16'nın büyük ekranla
 2. Tabletin gösterdiği 6 haneli kodu panelde **Tabletler → Tablet bağla** bölümüne yazın.
 3. Tablete “Salon tableti” gibi bir ad verin.
 4. Metin ve programın eşitlenmesini bekleyin. Panelde metnin tablete ulaştığı görünür; ses bu aşamada üretilmez.
-5. İnternet açıkken tabletin **Ses denemesi** düğmesine dokunun. Tablet, Node.js API üzerinden Gemini sesini alır ve yerel önbelleğine kaydeder. Medya sesini ayarlayın.
+5. İnternet açıkken panelden birkaç dakika sonrasına bir hatırlatıcı ekleyin. Tablet zamanı gelince Node.js API üzerinden Gemini sesini alır, yerel önbelleğine kaydeder ve otomatik okur. Medya sesini cihaz ayarlarından ayarlayın.
 
-Kod 10 dakika geçerlidir. Yenilemek için **Yeni kod al** kullanılabilir. Tablet, eşleştirme sırrını kanıtlamadan cihaz anahtarını alamaz. Cihaz anahtarı SecureStore'da saklanır.
+Kod 10 dakika geçerlidir; süresi dolunca kendiliğinden yenilenir. Bağlantı hatalarında tablet otomatik yeniden dener. Tablet, eşleştirme sırrını kanıtlamadan cihaz anahtarını alamaz. Cihaz anahtarı SecureStore'da saklanır.
 
 ## Duvarda kullanım
 
 - Uygulama ön planda ve tablet prize bağlı kalsın. `expo-keep-awake` ekranın uygulama açıkken uyumasını önler.
 - Android'in ekran sabitleme özelliğiyle uygulamanın yanlışlıkla kapatılmasını sınırlayabilirsiniz. Otomatik açılış ve tam yönetilen kiosk bu sürümde yoktur.
 - Otomatik tarih/saat açık olsun. Sunucu ile 1 dakikadan fazla fark algılanırsa uygulama bilgi verir.
-- Sessiz saatlerde rutin ekranda görünür, ses çalmaz. Ekrandaki ay simgesi yalnızca arayüz rengini koyulaştırır; sistem parlaklığını değiştirmez.
-- Her sesli duyurudan önce düşük sesli, iki notalı bir ton ve kısa bir duraklama duyulur. Ton ve duraklama toplam 1,9 saniyedir; ses denemesinde ve önbellekten okumada da çalar. Ton uygulamada gömülüdür; ek ağ isteği veya Gemini ücreti oluşturmaz. Kaynak dosya `node scripts/generate-chime.mjs` ile yeniden üretilebilir.
+- Sessiz saatler panelden etkinleştirilmişse rutin ekranda görünür, ses çalmaz.
+- Her sesli duyurudan önce düşük sesli, iki notalı bir ton ve kısa bir duraklama duyulur. Ton ve duraklama toplam 1,9 saniyedir; önbellekten okumada da çalar. Ton uygulamada gömülüdür; ek ağ isteği veya Gemini ücreti oluşturmaz. Kaynak dosya `node scripts/generate-chime.mjs` ile yeniden üretilebilir.
 - Uygulama arka plana alınır veya kapatılırsa zamanında seslendirme garanti edilmez. Arka plana geçiş mevcut sesi keser.
 
-Seslendirme sonrası **Tamamlandı** veya **5 dakika sonra** seçilebilir. Aynı dakikadaki duyurular sıraya girer; 2 dakikayı aşan gecikmeler seslendirilmeden “Kaçırıldı” kaydedilir.
+Tablet ekranında düğme, kaydırma veya dokunarak işlem yapma yoktur. Seslendirme sonucu görünür; duyuru kartı işlem bittikten 15 saniye sonra kendiliğinden sıradaki programa döner. Yaklaşan rutinler üçerli gruplar halinde 15 saniyede bir değişir. Seslendirme, görevin tamamlandığı anlamına gelmez. Aynı dakikadaki duyurular sıraya girer; 2 dakikayı aşan gecikmeler seslendirilmeden “Kaçırıldı” kaydedilir.
 
-Panelden tablet bağlantısını kaldırmak bir sonraki başarılı ağ isteğinde cihaza ulaşır. Çevrimdışı tablet, iptal bilgisi ulaşana kadar indirilmiş programını çalıştırır. Tabletteki **Cihaz** düğmesine 2 saniye basılı tutarak yerel verileri ve sesleri temizleyip yeniden eşleştirme ekranına dönebilirsiniz.
+Tablet bağlantısı panelden kaldırılır. İptal bilgisi bir sonraki ağ isteğinde cihaza ulaşınca yerel aile verileri ve sesler temizlenir, eşleştirme ekranı otomatik açılır. Çevrimdışı tablet, iptal bilgisi ulaşana kadar indirilmiş programını çalıştırır.
 
 ## Ön hatırlatmalar
 
 Panelde **Ön hatırlatma ekle** ile iki farklı süre seçilebilir (1–1440 dakika). Etkinliğin asıl saatinde, “Saatinde tablet ne söylesin?” alanındaki metin okunur. Ön bildirimler kişi, başlık ve kalan süreye göre otomatik hazırlanır. En az bir saat kalan aynı gün etkinliklerinde “bugün”, önceki güne taşanlarda uygun gün ifadesi kullanılır. Gün hesabı etkinliğin saat dilimine göre yapılır.
 
-Ön bildirim ve ana duyuru ayrı olaylardır. “Anladım” yalnızca o ön bildirimi onaylar; ana duyuruyu iptal etmez. Kalan süreyi yanlış söylememek için ön bildirimlerde 5 dakika erteleme sunulmaz. Etkinlik başlamışsa geciken ön bildirim atlanır. Sessiz saatler, duraklatma ve silme tüm bildirimlere uygulanır. Her duyurudan önce yumuşak ton çalar.
+Ön bildirim ve ana duyuru ayrı olaylardır; tablet üzerinde onay veya erteleme gerekmez. Etkinlik başlamışsa geciken ön bildirim atlanır. Sessiz saatler, duraklatma ve silme tüm bildirimlere uygulanır. Her duyurudan önce yumuşak ton çalar.
 
 Her farklı ön bildirim metni ilk okunduğunda Gemini sesi oluşturulur, sonraki aynı metinler tablet önbelleğinden kullanılır. Eski hatırlatıcılara kendiliğinden ön bildirim eklenmez. Yeni özellik için API/panel ve tablet birlikte güncellenmelidir.
 
@@ -78,8 +78,8 @@ Her farklı ön bildirim metni ilk okunduğunda Gemini sesi oluşturulur, sonrak
 
 Vercel ve gerçek ses hazır olduktan sonra:
 
-- 2–3 dakika sonrasına rutin kurun; bir kez çaldığını, tamamlamanın panel geçmişine geldiğini kontrol edin.
-- Tablette bir kez seslendirilen metin için Wi-Fi'yi kapatın; sonraki tekrarın ve ertelemenin önbellekten çalıştığını kontrol edin. Yeni metnin ilk okuması çevrimdışıyken ses üretemez; ekranda hata görünmelidir.
+- 2–3 dakika sonrasına rutin kurun; bir kez çaldığını, seslendirme sonucunun panel geçmişine geldiğini ve duyuru kartının otomatik kapandığını kontrol edin.
+- Tablette bir kez seslendirilen metin için Wi-Fi'yi kapatın; sonraki tekrarın önbellekten çalıştığını kontrol edin. Yeni metnin ilk okuması çevrimdışıyken ses üretemez; ekranda hata görünmelidir.
 - Uygulamayı kapatıp açın; daha önce duyurulan aynı olay tekrar çalmamalı.
 - Saat dilimi, geceyi aşan sessiz saatler ve 2 rutin aynı dakikada senaryolarını deneyin.
 - Metni değiştirip yeni metnin eşitlendiğini kontrol edin; ses isteği başarısız olsa da eski metnin sesi çalmamalı. Ses üretilirken duraklatma/silme işlemi tablette eşitlenirse oynatma iptal edilmelidir.

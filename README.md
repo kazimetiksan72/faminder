@@ -31,7 +31,7 @@ Demo verileri yalnızca tarayıcıda saklanır. Gerçek hesapla karışmaz, ses 
 - Sunucuda ses saklamadan, üretilen WAV dosyalarını tablette önbelleğe alma.
 - Tablet için 10 dakika geçerli 6 haneli eşleştirme kodu ve cihaz iptali.
 - Tablette SQLite programı ve yerel zamanlayıcı. Daha önce üretilmiş sesler çevrimdışı çalar; yeni metnin ilk okuması internet gerektirir.
-- Seslendirme, tamamlandı, 5 dakika erteleme ve geçmiş kayıtları.
+- Dokunma gerektirmeyen tablet ekranı, otomatik seslendirme ve geçmiş kayıtları.
 - Metin değişikliklerini hemen uygulama; değişen metne eski sesi kullanmama ve yinelenen duyuruları engelleme.
 
 ## Vercel

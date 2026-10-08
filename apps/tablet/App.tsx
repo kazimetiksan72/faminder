@@ -1,14 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  AppState,
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { AppState, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useKeepAwake } from 'expo-keep-awake';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +11,7 @@ import {
   type Occurrence,
 } from '@faminder/shared';
 import * as storage from './src/storage';
+import { createPairingLoop, type PairingCode } from './src/pairing';
 import {
   api,
   apiBase,
@@ -27,7 +19,6 @@ import {
   Scheduler,
   stopAudio,
   synchronize,
-  readReminder,
   disconnectDevice,
 } from './src/engine';
 const colorMap = {
@@ -60,17 +51,13 @@ function Wall() {
     [ready, setReady] = useState(false),
     [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [now, setNow] = useState(Date.now());
-  const [pair, setPair] = useState<{ code: string; secret: string; expiresAt: string } | null>(
-      null,
-    ),
+  const [pair, setPair] = useState<PairingCode | null>(null),
     [message, setMessage] = useState(''),
     [online, setOnline] = useState(false),
     [lastSync, setLastSync] = useState<string | null>(null);
   const [current, setCurrent] = useState<Occurrence | null>(null),
     [recent, setRecent] = useState<Awaited<ReturnType<typeof storage.recent>>>([]),
-    [night, setNight] = useState(false),
-    [busy, setBusy] = useState(false);
-  const resetting = useRef(false);
+    [pairBusy, setPairBusy] = useState(false);
   const mounted = useRef(true),
     syncBusy = useRef(false),
     engine = useRef<Scheduler | null>(null);
@@ -98,57 +85,45 @@ function Wall() {
       clearInterval(timer);
     };
   }, []);
-  async function newCode() {
-    setBusy(true);
-    setMessage('');
-    try {
-      setPair(await api('/pairing/start', undefined, {}));
-    } catch (e) {
-      setMessage((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   useEffect(() => {
-    if (ready && !token && !pair) void newCode();
-  }, [ready, token]);
-  useEffect(() => {
-    if (token || !pair) return;
-    let pending = false;
-    let canceled = false;
-    const poll = async () => {
-      if (pending) return;
-      pending = true;
-      try {
-        const result = await api<{ status: string; token?: string }>('/pairing/poll', undefined, {
-          code: pair.code,
-          secret: pair.secret,
-        });
-        if (result.token && !canceled) {
-          await storage.credentials.set(result.token);
-          setToken(result.token);
-          setPair(null);
-          setMessage('');
-        }
-      } catch (e) {
-        if (!canceled) setMessage((e as Error).message);
-      } finally {
-        pending = false;
-      }
+    if (!ready || token) return;
+    const loop = createPairingLoop({
+      create: () => api<PairingCode>('/pairing/start', undefined, {}),
+      poll: (code) =>
+        api<{ token?: string }>('/pairing/poll', undefined, {
+          code: code.code,
+          secret: code.secret,
+        }),
+      saveToken: storage.credentials.set,
+      onCode: setPair,
+      onBusy: setPairBusy,
+      onError: setMessage,
+      onPaired: (value) => {
+        setToken(value);
+        setPair(null);
+        setMessage('');
+      },
+    });
+    const tick = () => {
+      if (AppState.currentState === 'active') void loop.tick();
     };
-    const timer = setInterval(() => void poll(), 4000);
-    void poll();
+    const timer = setInterval(tick, 4000);
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'active') tick();
+    });
+    tick();
     return () => {
-      canceled = true;
+      loop.stop();
       clearInterval(timer);
+      listener.remove();
     };
-  }, [pair, token]);
+  }, [ready, token]);
   async function sync(value: string) {
-    if (resetting.current || syncBusy.current || AppState.currentState !== 'active') return;
+    if (syncBusy.current || AppState.currentState !== 'active') return;
     syncBusy.current = true;
     try {
       const result = await synchronize(value);
-      if (mounted.current && !resetting.current) {
+      if (mounted.current) {
         setSnapshot(result.snapshot);
         setOnline(true);
         setLastSync(new Date().toISOString());
@@ -159,7 +134,7 @@ function Wall() {
         );
       }
     } catch (e) {
-      if (mounted.current && !resetting.current) {
+      if (mounted.current) {
         setOnline(false);
         setMessage('Bağlantı yok. Daha önce seslendirilmiş metinler önbellekten okunabilir.');
         const local = await storage.get<Snapshot>('snapshot');
@@ -197,29 +172,24 @@ function Wall() {
       engine.current = null;
     };
   }, [token]);
-  async function act(o: Occurrence, kind: 'complete' | 'snooze') {
-    setBusy(true);
-    try {
-      if (kind === 'complete') await storage.record(o, 'completed');
-      else await storage.snooze(o);
-      setCurrent(null);
-      updateRecent();
-    } catch {
-      setMessage('İşlem kaydedilemedi. Tekrar deneyin.');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const active = recent.find((r) => r.occurrence.id === current?.id);
+  useEffect(() => {
+    if (!current || !active) return;
+    // Let the finished announcement remain readable, then return to the program.
+    const id = current.id;
+    const timer = setTimeout(() => setCurrent((value) => (value?.id === id ? null : value)), 15000);
+    return () => clearTimeout(timer);
+  }, [current?.id, active?.status]);
   if (!ready)
     return (
-      <View style={s.center}>
+      <View pointerEvents="none" style={s.center}>
         <ActivityIndicator color="#537c4a" />
         <Text style={s.hint}>Evinizin ritmi hazırlanıyor…</Text>
       </View>
     );
   if (!token)
     return (
-      <SafeAreaView style={s.pairScreen}>
+      <SafeAreaView pointerEvents="none" style={s.pairScreen}>
         <StatusBar hidden />
         <View style={s.pairBrand}>
           <Text style={s.brand}>♧ faminder.</Text>
@@ -238,7 +208,7 @@ function Wall() {
           </View>
           <View style={s.codeCard}>
             <Text style={s.kicker}>EŞLEŞTİRME KODUNUZ</Text>
-            {busy ? (
+            {pairBusy ? (
               <ActivityIndicator color="#527e47" />
             ) : (
               <Text style={s.code}>{pair?.code ?? '— — —'}</Text>
@@ -246,13 +216,10 @@ function Wall() {
             <Text style={s.hint}>
               {pair
                 ? Date.parse(pair.expiresAt) > now
-                  ? 'Kod 10 dakika geçerlidir.'
-                  : 'Kodun süresi doldu. Yeni kod alın.'
+                  ? 'Kod süresi dolunca otomatik yenilenir.'
+                  : 'Yeni kod hazırlanıyor…'
                 : 'Bağlantı bekleniyor.'}
             </Text>
-            <TouchableOpacity style={s.lightButton} onPress={() => void newCode()} disabled={busy}>
-              <Text style={s.buttonLabel}>Yeni kod al</Text>
-            </TouchableOpacity>
           </View>
         </View>
         {message ? <Text style={s.error}>{message}</Text> : null}
@@ -263,13 +230,11 @@ function Wall() {
     );
   if (!snapshot)
     return (
-      <SafeAreaView style={s.center}>
+      <SafeAreaView pointerEvents="none" style={s.center}>
         <ActivityIndicator color="#537c4a" />
         <Text style={s.hint}>Ailenizin programı indiriliyor…</Text>
         {message ? <Text style={s.error}>{message}</Text> : null}
-        <TouchableOpacity onPress={() => void sync(token)} style={s.lightButton}>
-          <Text style={s.buttonLabel}>Tekrar dene</Text>
-        </TouchableOpacity>
+        <Text style={s.hint}>Bağlantı otomatik olarak yeniden denenir.</Text>
       </SafeAreaView>
     );
   const time = new Intl.DateTimeFormat('tr-TR', {
@@ -297,10 +262,10 @@ function Wall() {
     }).format(new Date(iso));
   const displayed = current ?? next?.o;
   const quiet = isQuiet(now, snapshot.family);
-  const active = recent.find((r) => r.occurrence.id === current?.id);
-  const actionable = !!current && !!active && active.status === 'played';
+  const pageCount = Math.max(1, Math.ceil(upcoming.length / 3));
+  const page = Math.floor(now / 15000) % pageCount;
   return (
-    <SafeAreaView style={[s.wall, night && s.dim]}>
+    <SafeAreaView pointerEvents="none" style={s.wall}>
       <StatusBar hidden />
       <View style={s.header}>
         <Text style={s.brand}>♧ faminder.</Text>
@@ -309,12 +274,6 @@ function Wall() {
             {online ? '● Bağlı' : '○ Çevrimdışı'}
             {quiet ? '  ·  Sessiz saatler' : ''}
           </Text>
-          <TouchableOpacity
-            onPress={() => setNight(!night)}
-            accessibilityLabel="Ekran parlaklığını azalt"
-          >
-            <Text style={s.night}>{night ? '☀' : '☾'}</Text>
-          </TouchableOpacity>
         </View>
       </View>
       <View style={s.wallMain}>
@@ -371,52 +330,21 @@ function Wall() {
                 'Ailenizle geçireceğiniz güzel anların tadını çıkarın.'}
             </Text>
             {current ? (
-              <View style={s.actions}>
-                {actionable ? (
-                  <>
-                    <TouchableOpacity
-                      disabled={busy}
-                      style={s.primaryButton}
-                      onPress={() => void act(current, 'complete')}
-                    >
-                      <Text style={s.primaryLabel}>
-                        ✓ {current.minutesBefore ? 'Anladım' : 'Tamamlandı'}
-                      </Text>
-                    </TouchableOpacity>
-                    {!current.minutesBefore && (
-                      <TouchableOpacity
-                        disabled={busy}
-                        style={s.lightButton}
-                        onPress={() => void act(current, 'snooze')}
-                      >
-                        <Text style={s.buttonLabel}>5 dakika sonra</Text>
-                      </TouchableOpacity>
-                    )}
-                  </>
-                ) : (
-                  <Text style={s.hint}>
-                    {active ? labels[active.status] : 'Ses hazırlanıyor ve okunuyor…'}
-                  </Text>
-                )}
-                <TouchableOpacity
-                  onPress={() => {
-                    stopAudio();
-                    setCurrent(null);
-                  }}
-                >
-                  <Text style={s.dismiss}>Kapat</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={s.hint}>
+                {active ? labels[active.status] : 'Ses hazırlanıyor ve okunuyor…'}
+              </Text>
             ) : next ? (
               <Text style={s.nextTime}>{clockTime(next.o!.scheduledAt)}</Text>
             ) : null}
           </View>
           <View style={s.listHeader}>
             <Text style={s.listTitle}>Günün devamı</Text>
-            <Text style={s.smallText}>{upcoming.length} yaklaşan rutin</Text>
+            <Text style={s.smallText}>
+              {upcoming.length} yaklaşan rutin{pageCount > 1 ? ` · ${page + 1}/${pageCount}` : ''}
+            </Text>
           </View>
-          <ScrollView style={s.upcoming} contentContainerStyle={{ gap: 10 }}>
-            {upcoming.slice(0, 8).map(({ r, o }) => (
+          <View style={s.upcoming}>
+            {upcoming.slice(page * 3, page * 3 + 3).map(({ r, o }) => (
               <View style={s.upcomingRow} key={r.id}>
                 <Text style={s.rowTime}>{clockTime(o!.scheduledAt)}</Text>
                 <View style={[s.rowIcon, { backgroundColor: colorMap[r.content!.color] }]}>
@@ -436,71 +364,12 @@ function Wall() {
                 </View>
               </View>
             ))}
-          </ScrollView>
+          </View>
         </View>
       </View>
       <View style={s.footer}>
         <Text style={s.footerText}>Hatırlamak bize, birlikte olmak size.</Text>
-        <View style={s.footerActions}>
-          <TouchableOpacity
-            disabled={busy}
-            onPress={async () => {
-              const occurrence = upcoming[0]?.o;
-              if (!occurrence) {
-                setMessage('Ses denemesi için önce bir hatırlatıcı ekleyin.');
-                return;
-              }
-              if (current) {
-                setMessage('Ses denemesini mevcut duyuru bittikten sonra yapın.');
-                return;
-              }
-              setBusy(true);
-              try {
-                await readReminder(occurrence, token);
-              } catch (e) {
-                setMessage((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Text style={s.footerLink}>Ses denemesi</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onLongPress={() =>
-              Alert.alert('Tableti ayır', 'Bu tabletteki aile verileri silinecek.', [
-                { text: 'Vazgeç', style: 'cancel' },
-                {
-                  text: 'Ayır',
-                  style: 'destructive',
-                  onPress: () =>
-                    void (async () => {
-                      resetting.current = true;
-                      setBusy(true);
-                      try {
-                        await engine.current?.stop();
-                        await disconnectDevice();
-                        setToken(null);
-                        setSnapshot(null);
-                        setCurrent(null);
-                        setRecent([]);
-                        setLastSync(null);
-                      } catch {
-                        setMessage('Tablet ayrılamadı. Tekrar deneyin.');
-                      } finally {
-                        resetting.current = false;
-                        setBusy(false);
-                      }
-                    })(),
-                },
-              ])
-            }
-            delayLongPress={2000}
-            onPress={() => setMessage('Tableti ayırmak için bu düğmeye 2 saniye basılı tutun.')}
-          >
-            <Text style={s.footerLink}>Cihaz</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={s.footerText}>Yönetim panelinden düzenlenir.</Text>
       </View>
     </SafeAreaView>
   );
@@ -514,7 +383,6 @@ const s = StyleSheet.create({
     gap: 20,
   },
   wall: { flex: 1, backgroundColor: '#f7f8f1', paddingHorizontal: 36, paddingTop: 18 },
-  dim: { backgroundColor: '#dce2d2' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -524,7 +392,6 @@ const s = StyleSheet.create({
   brand: { fontSize: 27, fontWeight: '800', color: '#315d40', letterSpacing: -1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 25 },
   connection: { fontSize: 12, color: '#8b9c7a' },
-  night: { fontSize: 27, color: '#7f9470', padding: 5 },
   wallMain: { flex: 1, flexDirection: 'row', gap: 36 },
   clockColumn: { flex: 0.9, justifyContent: 'center', paddingRight: 10 },
   kicker: { fontSize: 10, letterSpacing: 2, color: '#7b916b', fontWeight: '600' },
@@ -557,25 +424,6 @@ const s = StyleSheet.create({
   },
   currentText: { fontSize: 16, lineHeight: 26, color: '#81916d', marginTop: 12 },
   nextTime: { fontSize: 33, fontWeight: '300', color: '#5f7b51', marginTop: 15 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 20, flexWrap: 'wrap' },
-  primaryButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    backgroundColor: '#436c42',
-    borderRadius: 10,
-  },
-  primaryLabel: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  lightButton: {
-    paddingHorizontal: 17,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff99',
-    borderWidth: 1,
-    borderColor: '#dbe5cf',
-    borderRadius: 10,
-    marginTop: 0,
-  },
-  buttonLabel: { color: '#7a9165', fontSize: 13, fontWeight: '500' },
-  dismiss: { color: '#8d9e7b', fontSize: 12, padding: 10 },
   hint: { color: '#96a384', fontSize: 12, lineHeight: 22, marginTop: 12 },
   listHeader: {
     flexDirection: 'row',
@@ -584,7 +432,7 @@ const s = StyleSheet.create({
     marginVertical: 20,
   },
   listTitle: { color: '#788c66', fontSize: 16, fontWeight: '600' },
-  upcoming: { flex: 1 },
+  upcoming: { flex: 1, gap: 10 },
   upcomingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -613,8 +461,6 @@ const s = StyleSheet.create({
     paddingVertical: 18,
   },
   footerText: { fontSize: 10, color: '#a5b097' },
-  footerActions: { flexDirection: 'row', gap: 25 },
-  footerLink: { fontSize: 11, color: '#91a17f', padding: 8 },
   pairScreen: { flex: 1, backgroundColor: '#f0f4e8', padding: 45 },
   pairBrand: { gap: 15 },
   pairContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 50 },

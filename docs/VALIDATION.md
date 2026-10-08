@@ -2,7 +2,7 @@
 
 ## Yapılan kontroller
 
-- 55 otomatik test geçti: 15 ortak zamanlayıcı, 14 API/MongoDB entegrasyonu, 18 tablet motoru ve 8 yerel ses önbelleği testi.
+- 60 otomatik test geçti: 15 ortak zamanlayıcı, 14 API/MongoDB entegrasyonu, 18 tablet motoru, 8 yerel ses önbelleği ve 5 otomatik eşleştirme testi.
 - Tüm workspace TypeScript kontrolleri geçti.
 - React panel ve Node.js API production build'leri oluşturuldu.
 - Android için Expo JavaScript/Hermes dışa aktarımı alındı; APK/native derleme değildir.
@@ -49,6 +49,13 @@ Tablet istekleri React Native'in desteklediği AbortController ile iptal edilir.
 - API'de aile ayrımı, farklı ses anahtarları, istemciden metin enjekte edilememesi, silinen süre ve ses üretilirken değişen kişi adı doğrulandı.
 - Ön bildirim ve ana sesin ayrı dosyalarda tutulması ve çevrimdışı yeniden kullanımı test edildi.
 - Demo panelde ekleme, iki bildirim sınırı, mükerrer süre reddi, kaydetme ve düzenleyiciyi yeniden açma doğrulandı. 18:00 / 18:30 / 19:00 metin önizlemesi incelendi.
+
+## Dokunma gerektirmeyen tablet ekranı
+
+- Tamamlama, onay, erteleme, kapatma, ses denemesi, renk modu, cihaz ayırma ve manuel yeniden deneme düğmeleri kaldırıldı. Tablet ekranlarında dokunma işleyicisi veya kaydırılabilir liste kalmadığı kaynak koddan kontrol edildi.
+- Eşleştirme kodunun süresi dolunca yenilenmesi, çevrimdışı açılıştan ve ağ hatasından toparlanma, sunucunun süresi dolan kodu reddetmesi ve çakışan/gecikmiş isteklerin önlenmesi beş yeni testle doğrulandı.
+- Duyuru sonucu 15 saniye görünür; program listesi üçerli gruplar halinde otomatik değişir. Görevin tamamlandığına dair otomatik kayıt oluşturulmaz.
+- Bu sürümün imzalı iOS Release derlemesi doğrulandı; 8 Ekim 19:49'da iPad'e kuruldu ve açıldı. Üretim API'sinde cihazın yeni bağlantısı görüldü; açılış konsolunda JavaScript hatası görülmedi.
 
 ## Otomatik testlerin sınırları
 
